@@ -1,0 +1,5 @@
+ROVLOGS/
+Screenshots/
+ship.pck
+*.weights
+__pycache__
