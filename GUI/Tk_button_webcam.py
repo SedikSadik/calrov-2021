@@ -54,10 +54,10 @@ def video_main():
 
             scaled_img = cv2.resize(cv2image,(height, width))
             """
-            #detected_image = cv2.cvtColor(yolo_detection(frame),cv2.COLOR_BGR2RGB)
-            #img = Image.fromarray(detected_image)
+            detected_image = cv2.cvtColor(yolo_detection(frame),cv2.COLOR_BGR2RGB)
+            img = Image.fromarray(detected_image)
 
-            img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            #img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             imgtk = ImageTk.PhotoImage(image=img)
             video_label.imgtk = imgtk
             video_label.configure(image=imgtk)
@@ -140,9 +140,9 @@ def attitude_tk():
 
 ### YOLO and DETECTION
 ## Loading Yolo
-net = cv2.dnn.readNet('/home/violetcheese/Documents/CALROV/GUI/Yolo Files/yolov3.weights','/home/violetcheese/Documents/CALROV/GUI/Yolo Files/yolov3.cfg')
+net = cv2.dnn.readNet('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov3-wider_16000.weights','/home/violetcheese/Documents/CALROV/GUI/Yolo_files/cfg/yolov3-face.cfg')
 detection_classes = []
-with open('/home/violetcheese/Documents/CALROV/GUI/Yolo Files/coco.names', 'r') as f:
+with open('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/cfg/face.names', 'r') as f:
     detection_classes = [line.strip() for line in f.readlines()]
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]

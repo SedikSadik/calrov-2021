@@ -11,12 +11,11 @@ from pymavlink import mavutil
 from math import pi as PI
 import threading
 import datetime
-import os.path
 from random import random
 
-master = mavutil.mavlink_connection("udpin:192.168.2.1:14550")
-master.wait_heartbeat()
-print("Successful Connection!")
+#master = mavutil.mavlink_connection("udpin:192.168.2.1:14550")
+#master.wait_heartbeat()
+#print("Successful Connection!")
 
 
 cap = cv2.VideoCapture(0)
@@ -28,7 +27,7 @@ root=Tk()
 root.title("CALROV GUI")
 
 #Icon
-icontmp = Image.open(os.path.abspath('./GUI/gui_images/calrov_logo.jpg'))
+icontmp = Image.open('/home/violetcheese/Documents/CALROV/GUI/gui_images/calrov_logo.jpg')
 icon = ImageTk.PhotoImage(icontmp)
 root.tk.call('wm','iconphoto',root._w, icon)
 # TITLE TEXT
@@ -42,156 +41,30 @@ video_label = Label(app)
 app.grid(row=1,column=0, columnspan=4)
 video_label.grid()
 
-
-class Video():
-
-    """BlueRov video capture class constructor
-
-    Attributes:
-        port (int): Video UDP port
-        video_codec (string): Source h264 parser
-        video_decode (string): Transform YUV (12bits) to BGR (24bits)
-        video_pipe (object): GStreamer top-level pipeline
-        video_sink (object): Gstreamer sink element
-        video_sink_conf (string): Sink configuration
-        video_source (string): Udp source ip and port
-    """
-
-    def __init__(self, port=5600):
-        """Summary
-
-        Args:
-            port (int, optional): UDP port
-        """
-
-        Gst.init(None)
-
-        self.port = port
-        self._frame = None
-
-        # [Software component diagram](https://www.ardusub.com/software/components.html)
-        # UDP video stream (:5600)
-        self.video_source = 'udpsrc port={}'.format(self.port)
-        # [Rasp raw image](http://picamera.readthedocs.io/en/release-0.7/recipes2.html#raw-image-capture-yuv-format)
-        # Cam -> CSI-2 -> H264 Raw (YUV 4-4-4 (12bits) I420)
-        self.video_codec = '! application/x-rtp, payload=96 ! rtph264depay ! h264parse ! avdec_h264'
-        # Python don't have nibble, convert YUV nibbles (4-4-4) to OpenCV standard BGR bytes (8-8-8)
-        self.video_decode = \
-            '! decodebin ! videoconvert ! video/x-raw,format=(string)BGR ! videoconvert'
-        # Create a sink to get data
-        self.video_sink_conf = \
-            '! appsink emit-signals=true sync=false max-buffers=2 drop=true'
-
-        self.video_pipe = None
-        self.video_sink = None
-
-        self.run()
-
-    def start_gst(self, config=None):
-        """ Start gstreamer pipeline and sink
-        Pipeline description list e.g:
-            [
-                'videotestsrc ! decodebin', \
-                '! videoconvert ! video/x-raw,format=(string)BGR ! videoconvert',
-                '! appsink'
-            ]
-
-        Args:
-            config (list, optional): Gstreamer pileline description list
-        """
-
-        if not config:
-            config = \
-                [
-                    'videotestsrc ! decodebin',
-                    '! videoconvert ! video/x-raw,format=(string)BGR ! videoconvert',
-                    '! appsink'
-                ]
-
-        command = ' '.join(config)
-        self.video_pipe = Gst.parse_launch(command)
-        self.video_pipe.set_state(Gst.State.PLAYING)
-        self.video_sink = self.video_pipe.get_by_name('appsink0')
-
-    @staticmethod
-    def gst_to_opencv(sample):
-        """Transform byte array into np array
-
-        Args:
-            sample (TYPE): Description
-
-        Returns:
-            TYPE: Description
-        """
-        buf = sample.get_buffer()
-        caps = sample.get_caps()
-        array = np.ndarray(
-            (
-                caps.get_structure(0).get_value('height'),
-                caps.get_structure(0).get_value('width'),
-                3
-            ),
-            buffer=buf.extract_dup(0, buf.get_size()), dtype=np.uint8)
-        return array
-
-    def frame(self):
-        """ Get Frame
-
-        Returns:
-            iterable: bool and image frame, cap.read() output
-        """
-        return self._frame
-
-    def frame_available(self):
-        """Check if frame is available
-
-        Returns:
-            bool: true if frame is available
-        """
-        return type(self._frame) != type(None)
-
-    def run(self):
-        """ Get frame to update _frame
-        """
-
-        self.start_gst(
-            [
-                self.video_source,
-                self.video_codec,
-                self.video_decode,
-                self.video_sink_conf
-            ])
-
-        self.video_sink.connect('new-sample', self.callback)
-
-    def callback(self, sink):
-        sample = sink.emit('pull-sample')
-        new_frame = self.gst_to_opencv(sample)
-        self._frame = new_frame
-
-        return Gst.FlowReturn.OK
-
-video = Video(port=4777)
-
+recent_boxes = []
 img_scale = 1.3
 def video_main():
     global img_scale
-    if video_update and video.frame_available:
+    global recent_boxes
+
+    if video_update:
+        ret, frame = cap.read()
+        if ret:
         
-        frame = video.frame()
-    
-        """cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #BGR RGB dönüşümü
-        height, width = (int(cv2image.shape[1]*img_scale),int(cv2image.shape[0]*img_scale))
+            """cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #BGR RGB dönüşümü
+            height, width = (int(cv2image.shape[1]*img_scale),int(cv2image.shape[0]*img_scale))
 
-        scaled_img = cv2.resize(cv2image,(height, width))
-        """
-        detected_image = cv2.cvtColor(yolo_detection(frame),cv2.COLOR_BGR2RGB)
-        img = Image.fromarray(detected_image)
+            scaled_img = cv2.resize(cv2image,(height, width))
+            """
+            detected_image, recent_boxes = yolo_detection(frame)
+            
+            detected_image = cv2.cvtColor(detected_image , cv2.COLOR_BGR2RGB)
+            img = Image.fromarray(detected_image)
 
-        #img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        imgtk = ImageTk.PhotoImage(image=img)
-        video_label.imgtk = imgtk
-        video_label.configure(image=imgtk)
+            #img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            imgtk = ImageTk.PhotoImage(image=img)
+            video_label.imgtk = imgtk
+            video_label.configure(image=imgtk)
     video_label.after(1,video_main)
 ###Attitude Info
 
@@ -209,7 +82,7 @@ yaw_label.grid(row=2, column=2)
 
 
 
-
+'''
 ##Message Interval
 def request_message_interval(message_id: int, frequency_hz: float):
     """
@@ -230,12 +103,12 @@ def request_message_interval(message_id: int, frequency_hz: float):
         0, 0, 0, 0)
 
 # Configure AHRS2 message to be sent at 1Hz
-request_message_interval(mavutil.mavlink.MAVLINK_MSG_ID_AHRS2, 40)
+#request_message_interval(mavutil.mavlink.MAVLINK_MSG_ID_AHRS2, 5)
 
 # Configure ATTITUDE message to be sent at 2Hz
-request_message_interval(mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE, 40)
+request_message_interval(mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE, 100)
 
-
+'''
 def attitude_tk():
     
     '''
@@ -248,7 +121,7 @@ def attitude_tk():
             
             rcvpacket = master.recv_match().to_dict()
 
-            if rcvpacket['mavpackettype']=='ATTITUDE' or rcvpacket['macpackettype']=='AHRS2':
+            if rcvpacket['mavpackettype']=='ATTITUDE':
                 roll_value= int(100* rcvpacket['roll'])
                 pitch_value = int(100* rcvpacket['pitch'])
                 yaw_value = int(100* rcvpacket['yaw'])
@@ -271,9 +144,9 @@ def attitude_tk():
 
 ### YOLO and DETECTION
 ## Loading Yolo
-net = cv2.dnn.readNet(os.path.abspath('./GUI/Yolo_files/yolov3-wider_16000.weights'),os.path.abspath('./GUI/Yolo_files/cfg/yolov3.face.cfg'))
+net = cv2.dnn.readNet('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov3-wider_16000.weights','/home/violetcheese/Documents/CALROV/GUI/Yolo_files/cfg/yolov3-face.cfg')
 detection_classes = []
-with open(os.path.abspath('./GUI/Yolo_files/cfg/face.names'), 'r') as f:
+with open('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/cfg/face.names', 'r') as f:
     detection_classes = [line.strip() for line in f.readlines()]
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]
@@ -322,10 +195,41 @@ def yolo_detection(raw_image):
             cv2.putText(raw_image, label, (topleft_x, topleft_y),cv2.FONT_HERSHEY_COMPLEX,1,(0,165,255))
 
 
-    return raw_image
+    return raw_image , boxes
+Current_task = Label(root, text="SUanki gorev")
 
-def reset_function():
-    pass
+
+
+def pwm_movement():
+    while True:
+        try:
+            tlx,tly,w,h= recent_boxes[0]
+            
+            if tlx<208<tlx+w:
+                Current_task.config(text="EFE BURADA, ONU YAKALA!!!!")
+                
+            if tlx+w<208:
+                print("EFE SOLDA")
+                Current_task.config(text="EFE SOLDA")
+            if tlx>208:
+                Current_task.config(text="EFE sagda")
+        except:
+            pass
+
+
+
+
+
+
+
+
+Current_task.grid(row=5, column=1, columnspan=3)
+def reset_function(): 
+    global video_update
+    global attitude_update
+    video_update =False
+    attitude_update=False
+
 
 def toggle_video():
     global video_update
@@ -343,8 +247,14 @@ def toggle_attitude():
 reset_button = Button(root, command=threading.Thread(target=reset_function).start, text="reset")
 video_button = Button(root, command=threading.Thread(target=video_main).start, text='Video Start')
 attitude_button = Button(root, command=threading.Thread(target=attitude_tk).start, text="Attitude Start")
+efe_button = Button(root, command=threading.Thread(target=pwm_movement).start, text="Efeyi ara")
+
 toggle_video_button = Button(root, command=toggle_video, text="Toggle Video")
 toggle_attitude_button = Button(root, command=toggle_attitude, text="Toggle Attitude")
+
+
+
+
 
 #Button Placement
 reset_button.grid(row=4, column=0)
@@ -352,6 +262,7 @@ video_button.grid(row=4, column=1)
 attitude_button.grid(row=4, column=2)
 toggle_attitude_button.grid(row=4, column=3)
 toggle_video_button.grid(row=4,column=4)
+efe_button.grid(row=5, column=4)
 """videothread = threading.Thread(target=video_main)
 tk_main_thread = threading.Thread(target=attitude_tk)
 root_thread = threading.Thread(target=root.mainloop)
