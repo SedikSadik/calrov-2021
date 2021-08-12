@@ -3,6 +3,7 @@ import threading
 from pymavlink import mavutil
 #master = mavutil.mavlink_connection('192.168.2.1:14450')
 def veri_al():
+    return None
     while True:
         print('DATA recieved')
         sleep(0.1)
@@ -39,6 +40,8 @@ def changing_pwm(startpwm, stoppwm,step=1):
             pwm_start -= step
             sleep(0.02)
             print(f'Pwm: {pwm_start}')
+
+
 def Master_pwm(increment, channel_id=3, step=1):
     global operationtime
     #currentpwm = startpwm
@@ -51,35 +54,35 @@ def Master_pwm(increment, channel_id=3, step=1):
             #pwm_gonder(channel_id,1900)
             print('PWM1')
             sleep(0.1)
-        if time() > teststarttime+tm    and  time()<teststarttime+2*tm:
+        elif time() > teststarttime+tm    and  time()<teststarttime+2*tm:
             #pwm_gonder(channel_id,1800)
             print('PWM2')
             sleep(0.1)
-        if time() > teststarttime+2*tm   and  time()<teststarttime+3*tm:
+        elif time() > teststarttime+2*tm   and  time()<teststarttime+3*tm:
             #pwm_gonder(channel_id,1700)
             print('PWM3')
             sleep(0.1)
-        if time() > teststarttime+3*tm   and  time()<teststarttime+4*tm:
+        elif time() > teststarttime+3*tm   and  time()<teststarttime+4*tm:
             #pwm_gonder(channel_id,1600)
             print('PWM4')
             sleep(0.1)
-        if time() > teststarttime+4*tm   and  time()<teststarttime+5*tm:
+        elif time() > teststarttime+4*tm   and  time()<teststarttime+5*tm:
             #pwm_gonder(channel_id,1500)
             print('PWM5')
             sleep(0.1)
-        if time() > teststarttime+5*tm   and  time()<teststarttime+6*tm:
+        elif time() > teststarttime+5*tm   and  time()<teststarttime+6*tm:
             #pwm_gonder(channel_id,1400)
             print('PWM6')
             sleep(0.1)
-        if time() > teststarttime+6*tm   and  time()<teststarttime+7*tm:
+        elif time() > teststarttime+6*tm   and  time()<teststarttime+7*tm:
             #pwm_gonder(channel_id,1300)
             print('PWM7')
             sleep(0.1)
-        if time() > teststarttime+7*tm   and  time()<teststarttime+8*tm:
+        elif time() > teststarttime+7*tm   and  time()<teststarttime+8*tm:
             #pwm_gonder(channel_id,1200)
             print('PWM8')
             sleep(0.1)
-        if time() > teststarttime+40   and  time()<teststarttime+45:
+        elif time() > teststarttime+40   and  time()<teststarttime+45:
             #pwm_gonder(channel_id,1100)
             print('PWM9')
             sleep(0.1)

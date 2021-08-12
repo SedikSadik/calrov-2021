@@ -172,10 +172,11 @@ class Video():
         return Gst.FlowReturn.OK
 
 video = Video(port=4777)
-
+recent_boxes = []
 img_scale = 1.3
 def video_main():
     global img_scale
+    global recent_boxes
     if video_update and video.frame_available:
         
         frame = video.frame()
@@ -185,7 +186,8 @@ def video_main():
 
         scaled_img = cv2.resize(cv2image,(height, width))
         """
-        detected_image = cv2.cvtColor(yolo_detection(frame),cv2.COLOR_BGR2RGB)
+        detected_image, recent_boxes = yolo_detection(frame)
+        detected_image = cv2.cvtColor(detected_image,cv2.COLOR_BGR2RGB)
         img = Image.fromarray(detected_image)
 
         #img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -195,13 +197,11 @@ def video_main():
     video_label.after(1,video_main)
 ###Attitude Info
 
-roll_label = Label(root, text= 'Roll: Default')
-pitch_label = Label(root, text= 'Pitch: Default')
-yaw_label = Label(root, text= 'Pitch: Default')
+roll_label = Label(root, text= 'Roll: Default',font =("Courier", 14))
+pitch_label = Label(root, text= 'Pitch: Default',font =("Courier", 14))
+yaw_label = Label(root, text= 'Pitch: Default',font =("Courier", 14))
 ##Attitude Config
-roll_label.config(font =("Courier", 14))
-pitch_label.config(font =("Courier", 14))
-yaw_label.config(font =("Courier", 14))
+
 #Packing Attitude
 roll_label.grid(row=2, column=0)
 pitch_label.grid(row=2, column=1)
@@ -271,9 +271,9 @@ def attitude_tk():
 
 ### YOLO and DETECTION
 ## Loading Yolo
-net = cv2.dnn.readNet(os.path.abspath('./GUI/Yolo_files/yolov3-wider_16000.weights'),os.path.abspath('./GUI/Yolo_files/cfg/yolov3-face.cfg'))
+net = cv2.dnn.readNet(os.path.abspath('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov3.weights'),os.path.abspath('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov3.cfg'))
 detection_classes = []
-with open(os.path.abspath('./GUI/Yolo_files/cfg/face.names'), 'r') as f:
+with open(os.path.abspath('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/coco.names'), 'r') as f:
     detection_classes = [line.strip() for line in f.readlines()]
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]
@@ -327,6 +327,45 @@ def yolo_detection(raw_image):
 def reset_function():
     pass
 
+def send_pwm(x =0, y=0 , z = 500, roll=0 , buttons=0):
+    """Send manual pwm to the axis of a joystick. 
+    Relative to the vehicle
+    x for right-left motion
+    y for forward-backwards motion
+    z for up-down motion
+    r for the yaw axis
+        clockwise is -1000
+        counterclockwise is 1000
+    buttons is an integer with 
+    """
+    master.mav.manual_control_send(master.target_system, x,y,z,roll,buttons)
+
+Current_task = Label(root, text="Gorev Cubugu")
+
+Current_task.grid(row=5, column=1, columnspan=3)
+master.arducopter_arm()
+
+def pwm_movement():
+    while True:
+        try:
+            tlx,tly,w,h= recent_boxes[0]
+            if tlx<208<tlx+w:
+                
+                Current_task.config(text="EFE BURADA, ONU YAKALA!!!!")
+                #send_pwm(x=0, y=400, z=500, roll=0)
+            elif tlx+w<208:
+                Current_task.config(text="EFE SOLDA")
+                #send_pwm(x=-300, y=100, z=500,roll=-300)
+            elif tlx>208:
+                Current_task.config(text="EFE sagda")
+                #send_pwm(x=+300, y=0, roll=+300)
+            else:
+                #send_pwm(roll=200)
+                print('meh')
+        except:
+            pass
+
+
 def toggle_video():
     global video_update
     if video_update:
@@ -339,23 +378,32 @@ def toggle_attitude():
         attitude_update=False
     else:
         attitude_update=True
+def toggle_arm():
+    if master.motors_armed:
+        master.arducopter_disarm()
+    else:
+        master.arducopter_arm()
+
 ###Threads
-reset_button = Button(root, command=threading.Thread(target=reset_function).start, text="reset")
+reset_button = Button(root, command=reset_function, text="reset")
 video_button = Button(root, command=threading.Thread(target=video_main).start, text='Video Start')
 attitude_button = Button(root, command=threading.Thread(target=attitude_tk).start, text="Attitude Start")
 toggle_video_button = Button(root, command=toggle_video, text="Toggle Video")
 toggle_attitude_button = Button(root, command=toggle_attitude, text="Toggle Attitude")
-
+arm_button = Button(root, command=toggle_arm, text='arm-disarm')
 #Button Placement
 reset_button.grid(row=4, column=0)
 video_button.grid(row=4, column=1)
 attitude_button.grid(row=4, column=2)
 toggle_attitude_button.grid(row=4, column=3)
 toggle_video_button.grid(row=4,column=4)
+arm_button.grid(row=6, padx=20, pady=20, column=0)
+
 """videothread = threading.Thread(target=video_main)
 tk_main_thread = threading.Thread(target=attitude_tk)
 root_thread = threading.Thread(target=root.mainloop)
 """
+#
 if __name__ == '__main__':
     root.mainloop()
     

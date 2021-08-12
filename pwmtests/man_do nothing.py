@@ -1,4 +1,3 @@
-from typing_extensions import runtime
 from pymavlink import mavutil
 from time import sleep
 from time import time as TM
@@ -20,9 +19,17 @@ def send_pwm(x =0, y=0 , z = 500, roll=0 , buttons=0):
     buttons is an integer with 
     """
     master.mav.manual_control_send(master.target_system, x,y,z,roll,buttons)
+master.arducopter_arm()
+print("Waiting for the vehicle to arm")
+master.motors_armed_wait()
+print('Armed!')
+
 t_start = int(TM())
 run_time = 10
+
 while TM() < t_start+run_time:
     '''Do nothing'''
-    send_pwm()
+    #send_pwm()
     print(f"Nothing Done!, ")
+
+master.arducopter_disarm()

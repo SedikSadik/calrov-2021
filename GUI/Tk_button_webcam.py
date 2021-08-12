@@ -54,7 +54,9 @@ def video_main():
 
             scaled_img = cv2.resize(cv2image,(height, width))
             """
-            detected_image = cv2.cvtColor(yolo_detection(frame),cv2.COLOR_BGR2RGB)
+            gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            detected_image = yolo_detection(gray_frame)
+            #detected_image = cv2.cvtColor(yolo_detection(gray_frame),cv2.COLOR_BGR2RGB)
             img = Image.fromarray(detected_image)
 
             #img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -158,7 +160,7 @@ def yolo_detection(raw_image):
     class_ids = []
     confidences = []
     boxes = []
-    height , width, channels = raw_image.shape
+    height , width = raw_image.shape
     blob = cv2.dnn.blobFromImage(raw_image, 0.00392, (416,416), (0,0,0), True, crop=False)
     net.setInput(blob)
     outs = net.forward(output_layers)

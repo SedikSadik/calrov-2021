@@ -144,9 +144,9 @@ def attitude_tk():
 
 ### YOLO and DETECTION
 ## Loading Yolo
-net = cv2.dnn.readNet('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov3-wider_16000.weights','/home/violetcheese/Documents/CALROV/GUI/Yolo_files/cfg/yolov3-face.cfg')
+net = cv2.dnn.readNet('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov3.weights','/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov3.cfg')
 detection_classes = []
-with open('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/cfg/face.names', 'r') as f:
+with open('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/coco.names', 'r') as f:
     detection_classes = [line.strip() for line in f.readlines()]
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]
@@ -213,9 +213,9 @@ def pwm_movement():
                 Current_task.config(text="EFE SOLDA")
             if tlx>208:
                 Current_task.config(text="EFE sagda")
+            
         except:
-            pass
-
+            Current_task.config(text="Donuyorum.")
 
 
 
@@ -244,7 +244,7 @@ def toggle_attitude():
     else:
         attitude_update=True
 ###Threads
-reset_button = Button(root, command=threading.Thread(target=reset_function).start, text="reset")
+reset_button = Button(root, command=reset_function, text="reset")
 video_button = Button(root, command=threading.Thread(target=video_main).start, text='Video Start')
 attitude_button = Button(root, command=threading.Thread(target=attitude_tk).start, text="Attitude Start")
 efe_button = Button(root, command=threading.Thread(target=pwm_movement).start, text="Efeyi ara")
@@ -268,5 +268,6 @@ tk_main_thread = threading.Thread(target=attitude_tk)
 root_thread = threading.Thread(target=root.mainloop)
 """
 if __name__ == '__main__':
+
     root.mainloop()
     
