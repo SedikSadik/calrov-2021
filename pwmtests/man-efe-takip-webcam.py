@@ -144,7 +144,7 @@ def attitude_tk():
 
 ### YOLO and DETECTION
 ## Loading Yolo
-net = cv2.dnn.readNet('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov3.weights','/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov3.cfg')
+net = cv2.dnn.readNet('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov4-tiny.weights','/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov4-tiny.cfg')
 detection_classes = []
 with open('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/coco.names', 'r') as f:
     detection_classes = [line.strip() for line in f.readlines()]
@@ -248,7 +248,6 @@ reset_button = Button(root, command=reset_function, text="reset")
 video_button = Button(root, command=threading.Thread(target=video_main).start, text='Video Start')
 attitude_button = Button(root, command=threading.Thread(target=attitude_tk).start, text="Attitude Start")
 efe_button = Button(root, command=threading.Thread(target=pwm_movement).start, text="Efeyi ara")
-
 toggle_video_button = Button(root, command=toggle_video, text="Toggle Video")
 toggle_attitude_button = Button(root, command=toggle_attitude, text="Toggle Attitude")
 
@@ -262,7 +261,7 @@ video_button.grid(row=4, column=1)
 attitude_button.grid(row=4, column=2)
 toggle_attitude_button.grid(row=4, column=3)
 toggle_video_button.grid(row=4,column=4)
-efe_button.grid(row=5, column=4)
+efe_button.grid(row=5, column=2)
 """videothread = threading.Thread(target=video_main)
 tk_main_thread = threading.Thread(target=attitude_tk)
 root_thread = threading.Thread(target=root.mainloop)

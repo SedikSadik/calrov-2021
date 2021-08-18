@@ -40,29 +40,38 @@ app = Frame(root, bg="white")
 video_label = Label(app)
 app.grid(row=1,column=0, columnspan=4)
 video_label.grid()
+total_frame = 0
+
+
+fps_label = Label(root, text="Fps: 0")
+fps_label.grid(row=6, column=1)
+
+
 
 
 img_scale = 1.3
 def video_main():
     global img_scale
+    global total_frame
     if video_update:
         ret, frame = cap.read()
         if ret:
-        
+            
             """cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #BGR RGB dönüşümü
             height, width = (int(cv2image.shape[1]*img_scale),int(cv2image.shape[0]*img_scale))
 
             scaled_img = cv2.resize(cv2image,(height, width))
             """
-            gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            detected_image = yolo_detection(gray_frame)
-            #detected_image = cv2.cvtColor(yolo_detection(gray_frame),cv2.COLOR_BGR2RGB)
+            detected_image = cv2.cvtColor(yolo_detection(frame),cv2.COLOR_BGR2RGB)
             img = Image.fromarray(detected_image)
 
             #img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             imgtk = ImageTk.PhotoImage(image=img)
             video_label.imgtk = imgtk
             video_label.configure(image=imgtk)
+            total_frame+=1
+    dtime = time()-start_time
+    fps_label.config(text=f"Fps: {total_frame/dtime}")
     video_label.after(1,video_main)
 ###Attitude Info
 
@@ -142,9 +151,9 @@ def attitude_tk():
 
 ### YOLO and DETECTION
 ## Loading Yolo
-net = cv2.dnn.readNet('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov3-wider_16000.weights','/home/violetcheese/Documents/CALROV/GUI/Yolo_files/cfg/yolov3-face.cfg')
+net = cv2.dnn.readNet('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov4-tiny.weights','/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov4-tiny.cfg')
 detection_classes = []
-with open('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/cfg/face.names', 'r') as f:
+with open('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/coco.names', 'r') as f:
     detection_classes = [line.strip() for line in f.readlines()]
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]
@@ -160,7 +169,7 @@ def yolo_detection(raw_image):
     class_ids = []
     confidences = []
     boxes = []
-    height , width = raw_image.shape
+    height , width, ch = raw_image.shape
     blob = cv2.dnn.blobFromImage(raw_image, 0.00392, (416,416), (0,0,0), True, crop=False)
     net.setInput(blob)
     outs = net.forward(output_layers)
@@ -210,7 +219,9 @@ def toggle_attitude():
         attitude_update=False
     else:
         attitude_update=True
+
 ###Threads
+
 reset_button = Button(root, command=threading.Thread(target=reset_function).start, text="reset")
 video_button = Button(root, command=threading.Thread(target=video_main).start, text='Video Start')
 attitude_button = Button(root, command=threading.Thread(target=attitude_tk).start, text="Attitude Start")
@@ -223,10 +234,13 @@ video_button.grid(row=4, column=1)
 attitude_button.grid(row=4, column=2)
 toggle_attitude_button.grid(row=4, column=3)
 toggle_video_button.grid(row=4,column=4)
+
 """videothread = threading.Thread(target=video_main)
 tk_main_thread = threading.Thread(target=attitude_tk)
 root_thread = threading.Thread(target=root.mainloop)
 """
+start_time = time()
 if __name__ == '__main__':
     root.mainloop()
+
     

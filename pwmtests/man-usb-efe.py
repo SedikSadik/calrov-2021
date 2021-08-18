@@ -189,7 +189,7 @@ def video_main():
         detected_image, recent_boxes = yolo_detection(frame)
         detected_image = cv2.cvtColor(detected_image,cv2.COLOR_BGR2RGB)
         img = Image.fromarray(detected_image)
-
+        
         #img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         imgtk = ImageTk.PhotoImage(image=img)
         video_label.imgtk = imgtk
@@ -230,10 +230,10 @@ def request_message_interval(message_id: int, frequency_hz: float):
         0, 0, 0, 0)
 
 # Configure AHRS2 message to be sent at 1Hz
-request_message_interval(mavutil.mavlink.MAVLINK_MSG_ID_AHRS2, 40)
+request_message_interval(mavutil.mavlink.MAVLINK_MSG_ID_AHRS2, 10)
 
 # Configure ATTITUDE message to be sent at 2Hz
-request_message_interval(mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE, 40)
+request_message_interval(mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE, 10)
 
 
 def attitude_tk():
@@ -271,7 +271,7 @@ def attitude_tk():
 
 ### YOLO and DETECTION
 ## Loading Yolo
-net = cv2.dnn.readNet(os.path.abspath('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov3.weights'),os.path.abspath('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov3.cfg'))
+net = cv2.dnn.readNet(os.path.abspath('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov4-tiny.weights'),os.path.abspath('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov4-tiny.cfg'))
 detection_classes = []
 with open(os.path.abspath('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/coco.names'), 'r') as f:
     detection_classes = [line.strip() for line in f.readlines()]
@@ -299,7 +299,7 @@ def yolo_detection(raw_image):
             scores = detection[5:]
             class_id = np.argmax(scores)
             confidence = scores[class_id]
-            if confidence > 0.4:
+            if confidence > 0.5:
                 center_x = int(detection[0]*width)
                 center_y = int(detection[1]*height)
                 w = int(detection[2]*width)
@@ -322,7 +322,7 @@ def yolo_detection(raw_image):
             cv2.putText(raw_image, label, (topleft_x, topleft_y),cv2.FONT_HERSHEY_COMPLEX,1,(0,165,255))
 
 
-    return raw_image
+    return raw_image, boxes
 
 def reset_function():
     pass
@@ -344,53 +344,58 @@ Current_task = Label(root, text="Gorev Cubugu")
 
 Current_task.grid(row=5, column=1, columnspan=3)
 master.arducopter_arm()
-
+master.motors_armed_wait()
+moving = False
 def pwm_movement():
-    while True:
+    start_time = time()
+    while time()<start_time+10:
         try:
             tlx,tly,w,h= recent_boxes[0]
             if tlx<208<tlx+w:
                 
                 Current_task.config(text="EFE BURADA, ONU YAKALA!!!!")
-                #send_pwm(x=0, y=400, z=500, roll=0)
+                send_pwm(x=500, z=500, roll=0)
             elif tlx+w<208:
                 Current_task.config(text="EFE SOLDA")
-                #send_pwm(x=-300, y=100, z=500,roll=-300)
+                send_pwm( x=300, z=500,roll=-100)
             elif tlx>208:
                 Current_task.config(text="EFE sagda")
-                #send_pwm(x=+300, y=0, roll=+300)
+                send_pwm(x=300, roll=100)
             else:
-                #send_pwm(roll=200)
-                print('meh')
+                send_pwm(roll=100)
+                Current_task.config(text="meh")
         except:
             pass
 
 
 def toggle_video():
     global video_update
-    if video_update:
-        video_update=False
-    else:
-        video_update=True
+    video_update = not video_update
 def toggle_attitude():
     global attitude_update
-    if attitude_update:
-        attitude_update=False
-    else:
-        attitude_update=True
+    attitude_update = not attitude_update
+def toggle_movement():
+    global moving
+    moving = not moving
+
 def toggle_arm():
-    if master.motors_armed:
+    if master.motors_armed():
         master.arducopter_disarm()
+        master.motors_disarmed_wait()
     else:
         master.arducopter_arm()
+        master.motors_armed_wait()
 
 ###Threads
-reset_button = Button(root, command=reset_function, text="reset")
+reset_button = Button(root, command=threading.Thread(target=pwm_movement).start, text="pwmmovemet")
 video_button = Button(root, command=threading.Thread(target=video_main).start, text='Video Start')
 attitude_button = Button(root, command=threading.Thread(target=attitude_tk).start, text="Attitude Start")
 toggle_video_button = Button(root, command=toggle_video, text="Toggle Video")
 toggle_attitude_button = Button(root, command=toggle_attitude, text="Toggle Attitude")
 arm_button = Button(root, command=toggle_arm, text='arm-disarm')
+efe_button = Button(root, command=pwm_movement, text="Efeyi ara")
+
+
 #Button Placement
 reset_button.grid(row=4, column=0)
 video_button.grid(row=4, column=1)
@@ -398,6 +403,8 @@ attitude_button.grid(row=4, column=2)
 toggle_attitude_button.grid(row=4, column=3)
 toggle_video_button.grid(row=4,column=4)
 arm_button.grid(row=6, padx=20, pady=20, column=0)
+efe_button.grid(row=6, column=2)
+
 
 """videothread = threading.Thread(target=video_main)
 tk_main_thread = threading.Thread(target=attitude_tk)
