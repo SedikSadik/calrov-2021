@@ -12,7 +12,7 @@ from math import pi as PI
 import threading
 import datetime
 from random import random
-
+import os
 master = mavutil.mavlink_connection("udpin:192.168.2.1:14550")
 master.wait_heartbeat()
 print("Bağlantı kuruldu!")
@@ -23,7 +23,7 @@ root=Tk()
 root.title("CALROV GUI")
 
 #Icon
-icontmp = Image.open('/home/violetcheese/Documents/CALROV/GUI/gui_images/calrov_logo.jpg')
+icontmp = Image.open(os.path.abspath('./GUI/gui_images/calrov_logo.jpg'))
 icon = ImageTk.PhotoImage(icontmp)
 root.tk.call('wm','iconphoto',root._w, icon)
 # TITLE TEXT
@@ -204,7 +204,8 @@ class Video():
         self._frame = new_frame
 
         return Gst.FlowReturn.OK
-conlost = cv2.imread('/home/violetcheese/Desktop/CALROV/GUI/gui_images/todo.webp')
+conlost = cv2.imread(os.path.abspath('./GUI/gui_images/todo.webp'))
+
 
 def video_main():
     global conlost

@@ -51,7 +51,6 @@ def Motor_pwm(pwm, time=5):
 
 # AHRS2 ayarının 5 Hertz olarak ayarlanması
 req_msg_intvl(mavutil.mavlink.MAVLINK_MSG_ID_AHRS2, 5)
-
 # ATTITUDE mesajının 15 hertz olarak ayarlanması
 req_msg_intvl(mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE, 15)
 req_msg_intvl(mavutil.mavlink.MAVLINK_MSG_ID_HEARTBEAT, 1)

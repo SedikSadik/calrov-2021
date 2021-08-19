@@ -22,7 +22,7 @@ request_message_interval(mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE, 15)
 # Veri alma 
 while True:
     try:
-        packet = master.recv_match().to_dict()
+        packet = master.recv_match(blocking=True).to_dict()
         if packet['mavpackettype']=='ATTITUDE':
             print(packet['roll'])
     except KeyboardInterrupt:

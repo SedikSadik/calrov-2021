@@ -271,9 +271,9 @@ def attitude_tk():
 
 ### YOLO and DETECTION
 ## Loading Yolo
-net = cv2.dnn.readNet(os.path.abspath('./GUI/Yolo_files/yolov3-wider_16000.weights'),os.path.abspath('./GUI/Yolo_files/cfg/yolov3-face.cfg'))
+net = cv2.dnn.readNet(os.path.abspath('./GUI/Yolo_files/yolov4-tiny.weights'),os.path.abspath('./GUI/Yolo_files/yolov4-tiny.cfg'))
 detection_classes = []
-with open(os.path.abspath('./GUI/Yolo_files/cfg/face.names'), 'r') as f:
+with open(os.path.abspath('./GUI/Yolo_files/coco.names'), 'r') as f:
     detection_classes = [line.strip() for line in f.readlines()]
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]

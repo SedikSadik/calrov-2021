@@ -12,7 +12,7 @@ from math import pi as PI
 import threading
 import datetime
 from random import random
-
+import os
 #master = mavutil.mavlink_connection("udpin:192.168.2.1:14550")
 #master.wait_heartbeat()
 #print("Successful Connection!")
@@ -27,7 +27,7 @@ root=Tk()
 root.title("CALROV GUI")
 
 #Icon
-icontmp = Image.open('/home/violetcheese/Documents/CALROV/GUI/gui_images/calrov_logo.jpg')
+icontmp = Image.open(os.path.abspath('./GUI/gui_images/calrov_logo.jpg'))
 icon = ImageTk.PhotoImage(icontmp)
 root.tk.call('wm','iconphoto',root._w, icon)
 # TITLE TEXT
@@ -140,9 +140,9 @@ def attitude_tk():
 
 ### YOLO and DETECTION
 ## Loading Yolo
-net = cv2.dnn.readNet('/home/violetcheese/Documents/CALROV/GUI/Yolo Files/yolov3-tiny.weights','/home/violetcheese/Documents/CALROV/GUI/Yolo Files/yolov3-tiny.cfg')
+net = cv2.dnn.readNet(os.path.abspath('./GUI/Yolo_files/yolov4-tiny.weights'),os.path.abspath('./GUI/Yolo_files/yolov4-tiny.cfg'))
 detection_classes = []
-with open('/home/violetcheese/Documents/CALROV/GUI/Yolo Files/coco.names', 'r') as f:
+with open(os.path.abspath('./GUI/Yolo_files/coco.names'), 'r') as f:
     detection_classes = [line.strip() for line in f.readlines()]
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]

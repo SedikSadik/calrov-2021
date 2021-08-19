@@ -195,8 +195,9 @@ def video_main():
         video_label.imgtk = imgtk
         video_label.configure(image=imgtk)
     video_label.after(1,video_main)
-###Attitude Info
 
+
+###Attitude Info
 roll_label = Label(root, text= 'Roll: Default',font =("Courier", 14))
 pitch_label = Label(root, text= 'Pitch: Default',font =("Courier", 14))
 yaw_label = Label(root, text= 'Pitch: Default',font =("Courier", 14))
@@ -271,15 +272,14 @@ def attitude_tk():
 
 ### YOLO and DETECTION
 ## Loading Yolo
-net = cv2.dnn.readNet(os.path.abspath('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov4-tiny.weights'),os.path.abspath('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/yolov4-tiny.cfg'))
+net = cv2.dnn.readNet(os.path.abspath('./GUI/Yolo_files/yolov4-tiny.weights'),os.path.abspath('./GUI/Yolo_files/yolov4-tiny.cfg'))
 detection_classes = []
-with open(os.path.abspath('/home/violetcheese/Documents/CALROV/GUI/Yolo_files/coco.names'), 'r') as f:
+with open(os.path.abspath('./GUI/Yolo_files/coco.names'), 'r') as f:
     detection_classes = [line.strip() for line in f.readlines()]
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]
 
 #print(detection_classes)
-
 
 attitude_update=False
 video_update = False
@@ -289,7 +289,7 @@ def yolo_detection(raw_image):
     class_ids = []
     confidences = []
     boxes = []
-    height , width, channels = raw_image.shape
+    height , width, _ = raw_image.shape
     blob = cv2.dnn.blobFromImage(raw_image, 0.00392, (416,416), (0,0,0), True, crop=False)
     net.setInput(blob)
     outs = net.forward(output_layers)
@@ -324,8 +324,6 @@ def yolo_detection(raw_image):
 
     return raw_image, boxes
 
-def reset_function():
-    pass
 
 def send_pwm(x =0, y=0 , z = 500, roll=0 , buttons=0):
     """Send manual pwm to the axis of a joystick. 
@@ -377,6 +375,8 @@ def toggle_attitude():
 def toggle_movement():
     global moving
     moving = not moving
+def reset_function():
+    pass
 
 def toggle_arm():
     if master.motors_armed():

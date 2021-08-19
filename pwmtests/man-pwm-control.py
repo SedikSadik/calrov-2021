@@ -25,19 +25,6 @@ master.mav.set_mode_send(
     master.target_system,
     mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
     mode_id)
-def send_pwm(x =0, y=0 , z = 500, yaw=0 , buttons=0):
-    """Send manual pwm to the axis of a joystick. 
-    Relative to the vehicle
-    x for right-left motion
-    y for forward-backwards motion
-    z for up-down motion
-    r for the yaw axis
-        clockwise is -1000
-        counterclockwise is 1000
-    buttons is an integer with 
-    """
-    master.mav.manual_control_send(master.target_system, x,y,z,yaw,buttons)
-
 
 while True:
     # Wait for ACK command
@@ -57,46 +44,13 @@ print("Waiting for the vehicle to arm")
 master.motors_armed_wait()
 print('Armed!')
 
-t_start = int(TM())
-run_time = 6
 
-t_start = TM()
-while TM() < t_start+5:
-    '''Do nothing'''
-    send_pwm(x=500)
-
-t_start = TM()
-while TM() < t_start+8:
-    '''Do nothing'''
-    send_pwm(z=100)
-mode = "ALT_HOLD"
-
-mode_id = master.mode_mapping()[mode]
-
-master.mav.set_mode_send(
-    master.target_system,
-    mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-    mode_id)
-
-t_start=TM()
-while TM() < t_start+5:
-    '''Do nothing'''
-    send_pwm(x=500)
-    
-t_start=TM()
-while TM() < t_start+3:
-    '''Do nothing'''
-    send_pwm(z=700)
-
-t_start=TM()
-while TM() < t_start+4:
-    '''Do nothing'''
-    send_pwm(yaw=800, z=350)
-t_start=TM()
-
-while TM() < t_start+4:
-    '''Do nothing'''
-    send_pwm(yaw=-800, z=350)
+def run_motors(run_time, x=0, y=0, z=500, yaw = 0, buttons = 0):
+    """run_time = for how long is pwm sent"""
+    t_start = int(TM())
+    print(f"running for {run_time} seconds, with pwm x:{x},y={y}, z={z} \n yaw:{yaw}, buttons:{buttons}")
+    while TM() < t_start+run_time:
+        master.mav.manual_control_send(master.target_system, x,y,z,yaw,buttons)
 
 
 master.arducopter_disarm()
