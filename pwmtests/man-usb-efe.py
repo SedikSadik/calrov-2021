@@ -42,6 +42,9 @@ video_label = Label(app)
 app.grid(row=1,column=0, columnspan=4)
 video_label.grid()
 
+fps_label = Label(root, text="Fps: 0")
+fps_label.grid(row=6, column=1)
+
 
 class Video():
 
@@ -173,9 +176,25 @@ class Video():
 
 video = Video(port=4777)
 recent_boxes = []
-img_scale = 1.3
+
+def pwm_decide_once(detected_image,recent_boxes):
+    try:
+
+        tlx,tly,w,h= recent_boxes[0]
+        imgWidth, imgHeight, _ = detected_image.shape
+        
+        imgMidx, imgMidy = imgWidth/2 , imgHeight/2
+        print(imgWidth)
+        if tlx<imgMidx<tlx+w:
+            print("in the middle")
+        elif imgMidx>tlx+w:
+            print("on the right")
+        elif imgMidx<tlx:
+            print("on the left")
+    except:
+        print("not found")
+
 def video_main():
-    global img_scale
     global recent_boxes
     if video_update and video.frame_available:
         
@@ -194,9 +213,10 @@ def video_main():
         imgtk = ImageTk.PhotoImage(image=img)
         video_label.imgtk = imgtk
         video_label.configure(image=imgtk)
+        pwm_decide_once(detected_image, recent_boxes)
     video_label.after(1,video_main)
 
-
+cv2.createButton()
 ###Attitude Info
 roll_label = Label(root, text= 'Roll: Default',font =("Courier", 14))
 pitch_label = Label(root, text= 'Pitch: Default',font =("Courier", 14))
@@ -338,6 +358,9 @@ def send_pwm(x =0, y=0 , z = 500, roll=0 , buttons=0):
     """
     master.mav.manual_control_send(master.target_system, x,y,z,roll,buttons)
 
+fps_label = Label(root, text="Fps: 0")
+fps_label.grid(row=7, column=1)
+
 Current_task = Label(root, text="Gorev Cubugu")
 
 Current_task.grid(row=5, column=1, columnspan=3)
@@ -393,17 +416,17 @@ attitude_button = Button(root, command=threading.Thread(target=attitude_tk).star
 toggle_video_button = Button(root, command=toggle_video, text="Toggle Video")
 toggle_attitude_button = Button(root, command=toggle_attitude, text="Toggle Attitude")
 arm_button = Button(root, command=toggle_arm, text='arm-disarm')
-efe_button = Button(root, command=pwm_movement, text="Efeyi ara")
+#efe_button = Button(root, command=pwm_movement, text="Efeyi ara")
 
 
 #Button Placement
 reset_button.grid(row=4, column=0)
 video_button.grid(row=4, column=1)
 attitude_button.grid(row=4, column=2)
-toggle_attitude_button.grid(row=4, column=3)
-toggle_video_button.grid(row=4,column=4)
-arm_button.grid(row=6, padx=20, pady=20, column=0)
-efe_button.grid(row=6, column=2)
+toggle_attitude_button.grid(row=5, column=0)
+toggle_video_button.grid(row=5,column=1)
+arm_button.grid(row=5, column=2)
+#efe_button.grid(row=6, column=0)
 
 
 """videothread = threading.Thread(target=video_main)

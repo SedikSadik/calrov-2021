@@ -41,16 +41,41 @@ video_label = Label(app)
 app.grid(row=1,column=0, columnspan=4)
 video_label.grid()
 
+
+
+fps_label = Label(root, text="Fps: 0")
+fps_label.grid(row=6, column=1)
+
 recent_boxes = []
-img_scale = 1.3
+
+Current_task = Label(root, text="SUanki gorev")
+Current_task.grid(row=6, column=0)
+def pwm_decide_once(detected_image,recent_boxes):
+    try:
+
+        tlx,tly,w,h= recent_boxes[0]
+        imgWidth, imgHeight, _ = detected_image.shape
+        
+        imgMidx, imgMidy = imgWidth/2 , imgHeight/2
+        print(imgWidth)
+        if tlx<imgMidx<tlx+w:
+            print("in the middle")
+        elif imgMidx>tlx+w:
+            print("on the right")
+        elif imgMidx<tlx:
+            print("on the left")
+    except:
+        print("not found")
+total_frames =0
+start_time=time()
 def video_main():
-    global img_scale
+    global total_frames
     global recent_boxes
 
     if video_update:
         ret, frame = cap.read()
         if ret:
-        
+            frame = cv2.resize(frame, (416,416))
             """cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #BGR RGB dönüşümü
             height, width = (int(cv2image.shape[1]*img_scale),int(cv2image.shape[0]*img_scale))
 
@@ -65,6 +90,11 @@ def video_main():
             imgtk = ImageTk.PhotoImage(image=img)
             video_label.imgtk = imgtk
             video_label.configure(image=imgtk)
+            pwm_decide_once(detected_image, recent_boxes)
+            total_frames+=1
+            dtime=time()-start_time
+            fps= total_frames/dtime
+            fps_label.config(text=f"Fps: {fps}")
     video_label.after(1,video_main)
 ###Attitude Info
 
@@ -193,11 +223,9 @@ def yolo_detection(raw_image):
             label = detection_classes[class_ids[i]]
             cv2.rectangle(raw_image, (topleft_x,topleft_y), (topleft_x+w,topleft_y+h), (0,100,255), 1)
             cv2.putText(raw_image, label, (topleft_x, topleft_y),cv2.FONT_HERSHEY_COMPLEX,1,(0,165,255))
-
+            cv2.putText(raw_image,f"{topleft_x}, {topleft_x+w},", (topleft_x, topleft_y-10), cv2.FONT_HERSHEY_COMPLEX, 1,(255,255,0))
 
     return raw_image , boxes
-Current_task = Label(root, text="SUanki gorev")
-
 
 
 def pwm_movement():
@@ -223,26 +251,24 @@ def pwm_movement():
 
 
 
-Current_task.grid(row=5, column=1, columnspan=3)
+
 def reset_function(): 
     global video_update
     global attitude_update
     video_update =False
     attitude_update=False
-
+    try:
+        master.arducopter_disarm()
+    except:
+        pass
 
 def toggle_video():
     global video_update
-    if video_update:
-        video_update=False
-    else:
-        video_update=True
+    video_update = not video_update
 def toggle_attitude():
     global attitude_update
-    if attitude_update:
-        attitude_update=False
-    else:
-        attitude_update=True
+    attitude_update = not attitude_update
+
 ###Threads
 reset_button = Button(root, command=reset_function, text="reset")
 video_button = Button(root, command=threading.Thread(target=video_main).start, text='Video Start')
@@ -259,8 +285,8 @@ toggle_attitude_button = Button(root, command=toggle_attitude, text="Toggle Atti
 reset_button.grid(row=4, column=0)
 video_button.grid(row=4, column=1)
 attitude_button.grid(row=4, column=2)
-toggle_attitude_button.grid(row=4, column=3)
-toggle_video_button.grid(row=4,column=4)
+toggle_attitude_button.grid(row=5, column=0)
+toggle_video_button.grid(row=5,column=1)
 efe_button.grid(row=5, column=2)
 """videothread = threading.Thread(target=video_main)
 tk_main_thread = threading.Thread(target=attitude_tk)
