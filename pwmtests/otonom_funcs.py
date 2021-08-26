@@ -15,36 +15,6 @@ import os.path
 from random import random
 import sys
 
-master = mavutil.mavlink_connection("udpin:192.168.2.1:14550")
-master.wait_heartbeat()
-print("Successful Connection!")
-
-
-cap = cv2.VideoCapture(0)
-if not cap.isOpened():
-    print("Cannot open camera")
-    exit()
-
-root=Tk()
-root.title("CALROV GUI")
-
-#Icon
-icontmp = Image.open(os.path.abspath('./GUI/gui_images/calrov_logo.jpg'))
-icon = ImageTk.PhotoImage(icontmp)
-root.tk.call('wm','iconphoto',root._w, icon)
-# TITLE TEXT
-l = Label(root, text = "CALROV")
-l.config(font =("Courier", 14))
-l.grid(row=0, column=0, columnspan=4)
-
-#Live Video Display
-app = Frame(root, bg="white")
-video_label = Label(app)
-app.grid(row=1,column=0, columnspan=4)
-video_label.grid()
-
-fps_label = Label(root, text="Fps: 0")
-fps_label.grid(row=6, column=1)
 
 
 class Video():
@@ -174,9 +144,7 @@ class Video():
         self._frame = new_frame
 
         return Gst.FlowReturn.OK
-
 video = Video(port=4777)
-recent_boxes = []
 def send_pwm(x =0, y=0 , z = 500, yaw=0 , buttons=0):
     """Send manual pwm to the axis of a joystick. 
     Relative to the vehicle
@@ -190,8 +158,8 @@ def send_pwm(x =0, y=0 , z = 500, yaw=0 , buttons=0):
     """
     master.mav.manual_control_send(master.target_system, x,y,z,yaw,buttons)
 
-##Flight Mode
 def mode_set(mode_name):
+
     if mode_name not in master.mode_mapping():
         print('Unknown mode : {}'.format(mode_name))
         print('Try:', list(master.mode_mapping().keys()))
@@ -201,21 +169,7 @@ def mode_set(mode_name):
         master.target_system,
         mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
         mode_id)
-mode_set('MANUAL')
-while True:
-    # Wait for ACK command
-    ack_msg = master.recv_match(type='COMMAND_ACK', blocking=True)
-    ack_msg = ack_msg.to_dict()
 
-    # Check if command in the same in `set_mode`
-    if ack_msg['command'] != mavutil.mavlink.MAVLINK_MSG_ID_SET_MODE:
-        continue
-
-    # Print the ACK result !
-    print(mavutil.mavlink.enums['MAV_RESULT'][ack_msg['result']].description)
-    break
-
-##Flight Mode over
 def pwm_decide_once(detected_image,recent_boxes):
     try:
         #detection coordinates
@@ -236,47 +190,8 @@ def pwm_decide_once(detected_image,recent_boxes):
             send_pwm(yaw=1000,z=250)
     except:
         send_pwm(yaw=1000,z=200)
-detected_image = None
-def video_main():
-    global recent_boxes
-    global detected_image
-    if video_update and video.frame_available():
-        
-        frame = video.frame()
-    
-        """cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #BGR RGB dönüşümü
-        height, width = (int(cv2image.shape[1]*img_scale),int(cv2image.shape[0]*img_scale))
+video_on = True
 
-        scaled_img = cv2.resize(cv2image,(height, width))
-        """
-        frame = cv2.resize(frame, (416,416))
-        detected_image, recent_boxes = yolo_detection(frame)
-        detected_image = cv2.cvtColor(detected_image,cv2.COLOR_BGR2RGB)
-        img = Image.fromarray(detected_image)
-        
-        #img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        imgtk = ImageTk.PhotoImage(image=img)
-        video_label.imgtk = imgtk
-        video_label.configure(image=imgtk)
-        
-        #pwm_decide_once(detected_image, recent_boxes)
-    video_label.after(1,video_main)
-
-###Attitude Info
-roll_label = Label(root, text= 'Roll: Default',font =("Courier", 14))
-pitch_label = Label(root, text= 'Pitch: Default',font =("Courier", 14))
-yaw_label = Label(root, text= 'Pitch: Default',font =("Courier", 14))
-##Attitude Config
-
-#Packing Attitude
-roll_label.grid(row=2, column=0)
-pitch_label.grid(row=2, column=1)
-yaw_label.grid(row=2, column=2)
-
-
-
-
-##Message Interval
 def request_message_interval(message_id: int, frequency_hz: float):
     """
     Request MAVLink message in a desired frequency,
@@ -295,59 +210,13 @@ def request_message_interval(message_id: int, frequency_hz: float):
         0, # Hedef, (0=arac)
         0, 0, 0, 0)
 
-# Configure AHRS2 message to be sent at 1Hz
-request_message_interval(mavutil.mavlink.MAVLINK_MSG_ID_AHRS2, 10)
-
-# Configure ATTITUDE message to be sent at 2Hz
-request_message_interval(mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE, 10)
+def status_update():
+    pass
 
 
-def attitude_tk():
-    
-    '''
-    global roll_value
-    global pitch_value
-    global yaw_value
-    '''
-    if attitude_update:
-        try:
-            
-            rcvpacket = master.recv_match().to_dict()
 
-            if rcvpacket['mavpackettype']=='ATTITUDE' or rcvpacket['macpackettype']=='AHRS2':
-                roll_value= int(100* rcvpacket['roll'])
-                pitch_value = int(100* rcvpacket['pitch'])
-                yaw_value = int(100* rcvpacket['yaw'])
 
-                roll_label.config(text=f'Roll: {roll_value}')
-                pitch_label.config(text=f'Pitch: {pitch_value}')
-                yaw_label.config(text=f'Yaw: {yaw_value}')
-                    #tuple halinde istenen verilerin alınması
-        except:
-            pass
-    
-    '''
-    roll_label.config(text=str(datetime.datetime.now()))
-    pitch_label.config(text='')
-    yaw_label.config(text='hehe')
-    roll_label.after(1, attitude_tk)
-    '''
-    
-    roll_label.after(1, attitude_tk)
-
-### YOLO and DETECTION
-## Loading Yolo
-net = cv2.dnn.readNet(os.path.abspath('./GUI/Yolo_files/yolov4-tiny.weights'),os.path.abspath('./GUI/Yolo_files/yolov4-tiny.cfg'))
-detection_classes = []
-with open(os.path.abspath('./GUI/Yolo_files/coco.names'), 'r') as f:
-    detection_classes = [line.strip() for line in f.readlines()]
-layer_names = net.getLayerNames()
-output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]
-
-#print(detection_classes)
-
-attitude_update=True
-video_update = True
+#------------------------------------------
 
 def yolo_detection(raw_image):
     """Take in as input a cv2 image"""
@@ -389,52 +258,17 @@ def yolo_detection(raw_image):
 
     return raw_image, boxes
 
-
-
-fps_label = Label(root, text="Fps: 0")
-fps_label.grid(row=7, column=1)
-
-Current_task = Label(root, text="Gorev Cubugu")
-
-Current_task.grid(row=5, column=1, columnspan=3)
-master.arducopter_arm()
-master.motors_armed_wait()
-def pwm_movement():
-    start_time = time()
-    global detected_image
-    while True:
-        try:
-        #detection coordinates
-            tlx,tly,w,h= recent_boxes[0]
-            detectedMidx = tlx+w/2
-            detectedMidy = tly+h/2
-
-            #image corrdinates
-            imgWidth, imgHeight, _ = detected_image.shape
-            imgWidth_third = imgWidth/3
-            imgWidth_two_third = 2*imgWidth_third
-            
-            if detectedMidx<imgWidth_third:             #left
-                send_pwm(yaw=-300,z=320)
-            elif detectedMidx<imgWidth_two_third:       #middle
-                send_pwm(x=500,z=320)
-            else:                                       #right
-                send_pwm(yaw=300,z=320)
-        except:
-            send_pwm(yaw=400,z=300)
-        
-
-
+#--------------------------------------------
 def toggle_video():
-    global video_update
-    video_update = not video_update
-def toggle_attitude():
-    global attitude_update
-    attitude_update = not attitude_update
+    global video_on
+    video_on = not video_on
+# def toggle_attitude():
+#     global attitude_update
+#     attitude_update = not attitude_update
 """def toggle_movement():
     global moving
     moving = not moving"""
-def reset_function():
+def toggle_start_stop():
     pass
 
 def toggle_arm():
@@ -445,31 +279,8 @@ def toggle_arm():
         master.arducopter_arm()
         master.motors_armed_wait()
 
-###Threads
-#reset_button = Button(root, command=threading.Thread(target=pwm_movement).start, text="pwmmovemet")
-video_button = Button(root, command=threading.Thread(target=video_main).start, text='Video Start')
-attitude_button = Button(root, command=threading.Thread(target=attitude_tk).start, text="Attitude Start")
-toggle_video_button = Button(root, command=toggle_video, text="Toggle Video")
-toggle_attitude_button = Button(root, command=toggle_attitude, text="Toggle Attitude")
-arm_button = Button(root, command=toggle_arm, text='arm-disarm')
-efe_button = Button(root, command=threading.Thread(target=pwm_movement).start, text="Efeyi ara")
 
 
-#Button Placement
-#reset_button.grid(row=4, column=0)
-video_button.grid(row=4, column=1)
-attitude_button.grid(row=4, column=2)
-toggle_attitude_button.grid(row=5, column=0)
-toggle_video_button.grid(row=5,column=1)
-arm_button.grid(row=5, column=2)
-efe_button.grid(row=6, column=0)
 
 
-"""videothread = threading.Thread(target=video_main)
-tk_main_thread = threading.Thread(target=attitude_tk)
-root_thread = threading.Thread(target=root.mainloop)
-"""
-#
-if __name__ == '__main__':
-    root.mainloop()
-    
+

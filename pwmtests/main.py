@@ -190,6 +190,7 @@ class Video():
         self._frame = new_frame
 
         return Gst.FlowReturn.OK
+
 def video_main():
     global recent_boxes
     if video_on and video.frame_available():
@@ -212,7 +213,18 @@ def video_main():
         pwm_decide_once(detected_image, recent_boxes)
     video_label.after(1,video_main)
 
-
+def send_pwm(x =0, y=0 , z = 500, yaw=0 , buttons=0):
+    """Send manual pwm to the axis of a joystick. 
+    Relative to the vehicle
+    x for right-left motion
+    y for forward-backwards motion
+    z for up-down motion
+    r for the yaw axis
+        clockwise is -1000
+        counterclockwise is 1000
+    buttons is an integer with 
+    """
+    master.mav.manual_control_send(master.target_system, x,y,z,yaw,buttons)
 
 ###THREADS
 video_button = Button(root, command=threading.Thread(target=video_main).start, text='Video Start')

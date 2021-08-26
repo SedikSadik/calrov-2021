@@ -1,58 +1,24 @@
-### IMPORTS
-##GUI
-from os import stat
-from posix import posix_spawn
+from re import L
+import threading
 from tkinter import *
 from PIL import ImageTk, Image
 import cv2
-##SYSTEM IMPORT
-import threading
 import gi
 gi.require_version("Gst", "1.0")
 from gi.repository import Gst
+import numpy as np
 from time import sleep, time
 from pymavlink import mavutil
 from math import pi as PI
-import numpy as np
 import threading
 import datetime
 import os.path
+from random import random, randint
+import sys
 
-
-
-
-### TINTER INITIALIZING
-root=Tk()
-root.title("CALROV GUI")
-##Icon
-icon = Image.open(os.path.abspath('./GUI/gui_images/calrov_logo.jpg'))
-icon = ImageTk.PhotoImage(icon)
-root.tk.call('wm','iconphoto',root._w, icon)
-
-## TITLE TEXT
-Title_label = Label(root, text = "CALROV")
-Title_label.config(font =("Courier", 20))
-Title_label.grid(row=0, column=0)
-
-##Live Video Display Box
-video_app = Frame(root, bg="white")
-video_app.grid(row=1,column=0, rowspan=12)
-
-
-video_label_yolo = Label(video_app)
-video_label_yolo.grid(row=0, column=0, rowspan=5)
-video_label_opencv = Label(video_app)
-video_label_opencv.grid(row=6, column=0, rowspan=5)
-
-
-
-yolo_fps_label = Label(video_app, text="Yolo Fps: 0")
-yolo_fps_label.grid(row=5, column=0)
-
-opencv_fps_label = Label(video_app, text="Opencv Fps: 0")
-opencv_fps_label.grid(row=11, column=0)
-
-### FUNCTION AND CLASS DEFINITIONS
+master = None
+boot_time = time()
+#-------------------------------
 class Video():
 
     """BlueRov video capture class constructor
@@ -180,41 +146,253 @@ class Video():
         self._frame = new_frame
 
         return Gst.FlowReturn.OK
-def video_main():
-    start_time = time()
+video = Video(port=4777)
+video_on = True
+def yoloVideo():
+    frame_start_time = time()
+    
     global recent_boxes
+
     if video_on:
+        ret, frame = cap.read()
+        if ret:
+            frame = cv2.resize(frame, (416,416))
+            """cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #BGR RGB dönüşümü
+            height, width = (int(cv2image.shape[1]*img_scale),int(cv2image.shape[0]*img_scale))
+
+            scaled_img = cv2.resize(cv2image,(height, width))
+            """
+            detected_image, recent_boxes = yolo_detection(frame)
+            
+            detected_image = cv2.cvtColor(detected_image , cv2.COLOR_BGR2RGB)
+            img = Image.fromarray(detected_image)
+
+            #img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            imgtk = ImageTk.PhotoImage(image=img)
+            yolo_video.imgtk = imgtk
+            yolo_video.configure(image=imgtk)
+            #pwm_decide_once(detected_image, recent_boxes)
+            
+            yolo_fps = 1.0/(time()-frame_start_time)
+            yolo_fps_label.config(text=f"Fps: {yolo_fps}")
+        yolo_video.after(1,yoloVideo)
+    else:
+        yolo_video_thread.join()
         
-        _, frame = cap.read()
-        """cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #BGR RGB dönüşümü
-        height, width = (int(cv2image.shape[1]*img_scale),int(cv2image.shape[0]*img_scale))
+def opencvVideo():
+    pass
 
-        scaled_img = cv2.resize(cv2image,(height, width))
-        """
-        # detected_image, recent_boxes = yolo_detection(frame)
-        # detected_image = cv2.cvtColor(detected_image,cv2.COLOR_BGR2RGB)
-        # img = Image.fromarray(detected_image)
-        frame = cv2.resize(frame, (416,416))
-        img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        imgtk = ImageTk.PhotoImage(image=img)
-        video_label_yolo.imgtk = imgtk
-        video_label_yolo.configure(image=imgtk)
-        # video_label_opencv.imgtk = imgtk
-        # video_label_opencv.configure(image=imgtk)
-        yolo_fps_label.config(text=f"FPS: {round(1.0/(time()-start_time))}")
 
-        # pwm_decide_once(detected_image, recent_boxes)
-    video_label_yolo.after(1,video_main)
-class Vehicle():
-    def __init__(self) -> None:
-        pass
-    def attitude_update() ->None:
-        pass
-    def depth_update() -> None:
-        pass
+#-------------------
+
+
+def send_pwm(x =0, y=0 , z = 500, yaw=0 , buttons=0):
+    """Send manual pwm to the axis of a joystick. 
+    Relative to the vehicle
+    x for right-left motion
+    y for forward-backwards motion
+    z for up-down motion
+    r for the yaw axis
+        clockwise is -1000
+        counterclockwise is 1000
+    buttons is an integer with 
+    """
+    master.mav.manual_control_send(master.target_system, x,y,z,yaw,buttons)
+
+def mode_set(mode_name):
+
+    if mode_name not in master.mode_mapping():
+        print('Unknown mode : {}'.format(mode_name))
+        print('Try:', list(master.mode_mapping().keys()))
+        sys.exit(1)
+    flight_mode_label.config(text=f"Flight Mode: {mode_name}")
+    mode_id = master.mode_mapping()[mode_name]
+    master.mav.set_mode_send(
+        master.target_system,
+        mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+        mode_id)
+    
+
+def pwm_decide_once(detected_image,recent_boxes):
+    try:
+        #detection coordinates
+        tlx,tly,w,h= recent_boxes[0]
+        detectedMidx = tlx+w/2
+        detectedMidy = tly+h/2
+
+        #image corrdinates
+        imgWidth, imgHeight, _ = detected_image.shape
+        imgWidth_third = imgWidth/3
+        imgWidth_two_third = 2*imgWidth_third
+        
+        if detectedMidx<imgWidth_third:             #left
+            #send_pwm(yaw=-400,z=150)
+            pass
+        elif detectedMidx<imgWidth_two_third:       #middle
+            #send_pwm(x=1000,z=150)
+            pass
+        else:                                       #right
+            send_pwm(yaw=1000,z=250)
+    except:
+        send_pwm(yaw=1000,z=200)
+video_on = True
+
+def request_message_interval(message_id: int, frequency_hz: float):
+    """
+    Request MAVLink message in a desired frequency,
+    documentation for SET_MESSAGE_INTERVAL:
+        https://mavlink.io/en/messages/common.html#MAV_CMD_SET_MESSAGE_INTERVAL
+
+    Args:
+        message_id (int): MAVLink message ID
+        frequency_hz (float): Desired frequency in Hz
+    """
+    master.mav.command_long_send(
+        master.target_system, master.target_component,
+        mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL, 0,
+        message_id, # MAVLINK mesaj tanimi
+        1e6 / frequency_hz, # Istenen frekans
+        0, # Hedef, (0=arac)
+        0, 0, 0, 0)
+
+status_update = True
+def statusUpdate():
+    
+    '''
+    global roll_value
+    global pitch_value
+    global yaw_value
+    '''
+
+    if status_update:
+        
+        try:
+            rcvpacket = master.recv_match().to_dict()
+        except:
+            rcvpacket = None
+        r,p,y,d = generatorfunc().pop(0), generatorfunc().pop(0), generatorfunc().pop(0), generatorfunc().pop(0)
+        roll_label.config(text=f'Roll: {r}')
+        pitch_label.config(text=f'Pitch: {p}')
+        yaw_label.config(text=f'Yaw: {y}')
+        depth_label.config(text=f'depth: {d}')
+        # if rcvpacket['mavpackettype']=='ATTITUDE' or rcvpacket['macpackettype']=='AHRS2':
+        #     roll_value= int(100* rcvpacket['roll'])
+        #     pitch_value = int(100* rcvpacket['pitch'])
+        #     yaw_value = int(100* rcvpacket['yaw'])
+
+        #     roll_label.config(text=f'Roll: {roll_value}')
+        #     pitch_label.config(text=f'Pitch: {pitch_value}')
+        #     yaw_label.config(text=f'Yaw: {yaw_value}')
+        #     #tuple halinde istenen verilerin alınması
+        roll_label.after(1, statusUpdate)
+    else:
+        status_update_thread.join()
+
+def generatorfunc():
+    vals = []
+    vals.append(randint(0,360))
+    vals.append(randint(0,360))
+    vals.append(randint(0,360))
+    vals.append(randint(0,10))
+    return vals
+
+
+
+def set_target_depth(depth):
+    
+    master.mav.set_position_target_global_int_send(
+        int(1e3 * (time.time() - boot_time)), # ms since boot
+        master.target_system, master.target_component,
+        coordinate_frame=mavutil.mavlink.MAV_FRAME_GLOBAL_INT,
+        type_mask=0xdfe,  # ignore everything except z position
+        lat_int=0, long_int=0, alt=depth, # (x, y WGS84 frame pos - not used), z [m]
+        vx=0, vy=0, vz=0, # velocities in NED frame [m/s] (not used)
+        afx=0, afy=0, afz=0, yaw=0, yaw_rate=0
+        # accelerations in NED frame [N], yaw, yaw_rate
+        #  (all not supported yet, ignored in GCS Mavlink)
+    )
+#------------------------------------------
+net = cv2.dnn.readNet(os.path.abspath('./GUI/Yolo_files/yolov4-tiny.weights'),os.path.abspath('./GUI/Yolo_files/yolov4-tiny.cfg'))
+detection_classes = []
+with open(os.path.abspath('./GUI/Yolo_files/coco.names'), 'r') as f:
+    detection_classes = [line.strip() for line in f.readlines()]
+layer_names = net.getLayerNames()
+output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]
+
+def yolo_detection(raw_image):
+    """Take in as input a cv2 image"""
+    class_ids = []
+    confidences = []
+    boxes = []
+    height , width, _ = raw_image.shape
+    blob = cv2.dnn.blobFromImage(raw_image, 0.00392, (416,416), (0,0,0), True, crop=False)
+    net.setInput(blob)
+    outs = net.forward(output_layers)
+
+    for out in outs:
+        for detection in out:
+            scores = detection[5:]
+            class_id = np.argmax(scores)
+            confidence = scores[class_id]
+            if confidence > 0.3:
+                center_x = int(detection[0]*width)
+                center_y = int(detection[1]*height)
+                w = int(detection[2]*width)
+                h = int(detection[3]*height)
+                ##Rectangle Draw
+                topleft_x = int(center_x-(w/2))
+                topleft_y = int(center_y-(h/2))
+
+                boxes.append([topleft_x,topleft_y,w,h])
+                confidences.append(float(confidence))
+                class_ids.append(class_id)
+    indexes = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
+    #DISPLAY DETECTION
+    total_detections = len(boxes)
+    for i in range(total_detections):
+        if i in indexes:
+            topleft_x, topleft_y, w,h = boxes[i]
+            label = detection_classes[class_ids[i]]
+            recognition_label.config(text=f"{label} bulundu")
+            cv2.rectangle(raw_image, (topleft_x,topleft_y), (topleft_x+w,topleft_y+h), (0,100,255), 1)
+            cv2.putText(raw_image, label, (topleft_x, topleft_y),cv2.FONT_HERSHEY_COMPLEX,1,(0,165,255))
+
+
+    return raw_image, boxes
+
+#--------------------------------------------
+def toggleVideo():
+    global video_on
+    video_on = not video_on
+# def toggle_attitude():
+#     global attitude_update
+#     attitude_update = not attitude_update
+"""def toggle_movement():
+    global moving
+    moving = not moving"""
+def toggleStart():
+    pass
+
+def toggleArm():
+    if master.motors_armed():
+        master.arducopter_disarm()
+        master.motors_disarmed_wait()
+        arm_status_label.config(text="Vehicle Status: Disarmed")
+    else:
+        master.arducopter_arm()
+        master.motors_armed_wait()
+        arm_status_label.config(text="Vehicle Status: Armed")
+
+
+# master = mavutil.mavlink_connection("udpin:192.168.2.1:14550")
+# master.wait_heartbeat()
+# print("Successful Connection!")
+
+
+
+
 
 ###  GLOBAL VARIABLES AND OBJECTS
-video = Video(port=4777)
 cap = cv2.VideoCapture(0)
 if not cap.isOpened():
     print("Cannot open camera")
@@ -224,45 +402,82 @@ recent_boxes = []
 
 video_on = True
 
+root=Tk()
+root.title("CALROV GUI")
+##Icon
+icon = Image.open(os.path.abspath('./GUI/gui_images/calrov_logo.jpg'))
+icon = ImageTk.PhotoImage(icon)
+root.tk.call('wm','iconphoto',root._w, icon)
+
+## TITLE TEXT
+Title_label = Label(root, text = "CALROV TALAY")
+Title_label.config(font =("Courier", 20))
+Title_label.grid(row=0, column=0, columnspan=4)
+
+##Live Video Display Box
+video_app = Frame(root, bg="white")
+video_app.grid(row=1,column=0,columnspan=2)
+
+
+yolo_video = Label(video_app)
+yolo_video.grid(row=1, column=0)
+opencv_video = Label(video_app)
+opencv_video.grid(row=1, column=1)
 
 
 
+yolo_fps_label = Label(video_app, text="Yolo Fps: 0")
+yolo_fps_label.grid(row=2, column=0)
+
+opencv_fps_label = Label(video_app, text="Opencv Fps: 0")
+opencv_fps_label.grid(row=2 , column=1)
+
+###THREADS
+yolo_video_thread = threading.Thread(target=yoloVideo)
+opencv_video_thread  = threading.Thread(target=opencvVideo)
+status_update_thread = threading.Thread(target=statusUpdate)
 ###BUTTONS
+
+
 button_frame = Frame(root, bg="white")
 button_frame.config(width=416,height=416)
-toggle_stop_start = Button(button_frame, text='Toggle Stop/Start')
-toggle_arm_disarm = Button(button_frame, text='Toggle Arm/Disarm')
+toggle_stop_start = Button(button_frame, text='Toggle Stop/Start',
+                            command=toggleStart)
+toggle_arm_disarm = Button(button_frame, text='Toggle Arm/Disarm', 
+                            command=toggleArm)
 
 servo_open = Button(button_frame, text='Open Servo')
 servo_close = Button(button_frame, text='Close Servo')
 
-yolo_video_button = Button(button_frame, command=threading.Thread(target=video_main).start, text='Toggle YOLO Display')
-opencv_video_button = Button(button_frame, text='Toggle Opencv Display')
+yolo_video_button = Button(button_frame, command=yolo_video_thread.start, text='Toggle YOLO Display')
+opencv_video_button = Button(button_frame, text='Toggle Opencv Display', command = opencv_video_thread.start)
 
-toggle_attitude = Button(button_frame, text='Toggle Attitude Display')
-button6 = Button(button_frame, text='button1')
+status_update_button = Button(button_frame, text='Status Update', command=status_update_thread.start)
+button6 = Button(button_frame, text='button6')
 
 ## BUtton Display
-button_frame.grid(row=0, column=1, rowspan=8)
+button_frame.grid(row=3, column=0)
 
+toggle_stop_start.grid()
+toggle_arm_disarm.grid()
 
+servo_open.grid()
+servo_close.grid()
 
-toggle_stop_start.grid(row=0)
-toggle_arm_disarm.grid(row=1)
+yolo_video_button.grid()
+opencv_video_button.grid()
 
-servo_open.grid(row=2)
-servo_close.grid(row=3)
-
-yolo_video_button.grid(row=4)
-opencv_video_button.grid(row=5)
-
-toggle_attitude.grid(row=6)
-button6.grid(row=7)
+status_update_button.grid()
+button6.grid()
 
 ### VEHICLE STATUS DISPLAY
 status_frame = Frame(root)
 status_frame.config( bg='gray')
-status_frame.grid(row=8, column=1, rowspan=6)
+status_frame.grid(row=3, column=1)
+
+arm_status_label = Label(status_frame, text="Vehile Status:")
+flight_mode_label = Label(status_frame, text="Flight Mode: ")
+
 
 roll_label = Label(status_frame, text="Roll: N/A")
 pitch_label = Label(status_frame, text="Pitch: N/A")
@@ -272,9 +487,12 @@ depth_label = Label(status_frame, text="Depth: N/A")
 servo_label = Label(status_frame, text="Servo: N/A")
 recognition_label = Label(status_frame, text="Object Recognition: N/A")
 
-
+current_activity_label = Label(status_frame, text="Current Activity: ")
 
 ## STATUS DISPLAY
+arm_status_label.grid()
+flight_mode_label.grid()
+
 roll_label.grid()
 pitch_label.grid()
 yaw_label.grid()
@@ -284,6 +502,8 @@ depth_label.grid()
 servo_label.grid()
 recognition_label.grid()
 
+
+###BUTTONS
 
 if __name__ == "__main__":
     root.mainloop()
