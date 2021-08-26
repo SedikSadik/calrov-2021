@@ -13,6 +13,7 @@ import threading
 import datetime
 import os.path
 from random import random
+import sys
 
 master = mavutil.mavlink_connection("udpin:192.168.2.1:14550")
 master.wait_heartbeat()
@@ -176,26 +177,69 @@ class Video():
 
 video = Video(port=4777)
 recent_boxes = []
+def send_pwm(x =0, y=0 , z = 500, yaw=0 , buttons=0):
+    """Send manual pwm to the axis of a joystick. 
+    Relative to the vehicle
+    x for right-left motion
+    y for forward-backwards motion
+    z for up-down motion
+    r for the yaw axis
+        clockwise is -1000
+        counterclockwise is 1000
+    buttons is an integer with 
+    """
+    master.mav.manual_control_send(master.target_system, x,y,z,yaw,buttons)
 
+##Flight Mode
+def mode_set(mode_name):
+    if mode_name not in master.mode_mapping():
+        print('Unknown mode : {}'.format(mode_name))
+        print('Try:', list(master.mode_mapping().keys()))
+        sys.exit(1)
+    mode_id = master.mode_mapping()[mode_name]
+    master.mav.set_mode_send(
+        master.target_system,
+        mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+        mode_id)
+mode_set('MANUAL')
+while True:
+    # Wait for ACK command
+    ack_msg = master.recv_match(type='COMMAND_ACK', blocking=True)
+    ack_msg = ack_msg.to_dict()
+
+    # Check if command in the same in `set_mode`
+    if ack_msg['command'] != mavutil.mavlink.MAVLINK_MSG_ID_SET_MODE:
+        continue
+
+    # Print the ACK result !
+    print(mavutil.mavlink.enums['MAV_RESULT'][ack_msg['result']].description)
+    break
+
+##Flight Mode over
 def pwm_decide_once(detected_image,recent_boxes):
     try:
-
+        #detection coordinates
         tlx,tly,w,h= recent_boxes[0]
-        imgWidth, imgHeight, _ = detected_image.shape
-        
-        imgMidx, imgMidy = imgWidth/2 , imgHeight/2
-        print(imgWidth)
-        if tlx<imgMidx<tlx+w:
-            print("in the middle")
-        elif imgMidx>tlx+w:
-            print("on the right")
-        elif imgMidx<tlx:
-            print("on the left")
-    except:
-        print("not found")
+        detectedMidx = tlx+w/2
+        detectedMidy = tly+h/2
 
+        #image corrdinates
+        imgWidth, imgHeight, _ = detected_image.shape
+        imgWidth_third = imgWidth/3
+        imgWidth_two_third = 2*imgWidth_third
+        
+        if detectedMidx<imgWidth_third:             #left
+            send_pwm(yaw=-1000,z=150)
+        elif detectedMidx<imgWidth_two_third:       #middle
+            send_pwm(x=1000,z=150)
+        else:                                       #right
+            send_pwm(yaw=1000,z=250)
+    except:
+        send_pwm(yaw=1000,z=200)
+detected_image = None
 def video_main():
     global recent_boxes
+    global detected_image
     if video_update and video.frame_available:
         
         frame = video.frame()
@@ -205,6 +249,7 @@ def video_main():
 
         scaled_img = cv2.resize(cv2image,(height, width))
         """
+        frame = cv2.resize(frame, (416,416))
         detected_image, recent_boxes = yolo_detection(frame)
         detected_image = cv2.cvtColor(detected_image,cv2.COLOR_BGR2RGB)
         img = Image.fromarray(detected_image)
@@ -213,10 +258,10 @@ def video_main():
         imgtk = ImageTk.PhotoImage(image=img)
         video_label.imgtk = imgtk
         video_label.configure(image=imgtk)
-        pwm_decide_once(detected_image, recent_boxes)
+        
+        #pwm_decide_once(detected_image, recent_boxes)
     video_label.after(1,video_main)
 
-cv2.createButton()
 ###Attitude Info
 roll_label = Label(root, text= 'Roll: Default',font =("Courier", 14))
 pitch_label = Label(root, text= 'Pitch: Default',font =("Courier", 14))
@@ -301,8 +346,8 @@ output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]
 
 #print(detection_classes)
 
-attitude_update=False
-video_update = False
+attitude_update=True
+video_update = True
 
 def yolo_detection(raw_image):
     """Take in as input a cv2 image"""
@@ -319,7 +364,7 @@ def yolo_detection(raw_image):
             scores = detection[5:]
             class_id = np.argmax(scores)
             confidence = scores[class_id]
-            if confidence > 0.5:
+            if confidence > 0.3:
                 center_x = int(detection[0]*width)
                 center_y = int(detection[1]*height)
                 w = int(detection[2]*width)
@@ -345,18 +390,6 @@ def yolo_detection(raw_image):
     return raw_image, boxes
 
 
-def send_pwm(x =0, y=0 , z = 500, roll=0 , buttons=0):
-    """Send manual pwm to the axis of a joystick. 
-    Relative to the vehicle
-    x for right-left motion
-    y for forward-backwards motion
-    z for up-down motion
-    r for the yaw axis
-        clockwise is -1000
-        counterclockwise is 1000
-    buttons is an integer with 
-    """
-    master.mav.manual_control_send(master.target_system, x,y,z,roll,buttons)
 
 fps_label = Label(root, text="Fps: 0")
 fps_label.grid(row=7, column=1)
@@ -366,27 +399,30 @@ Current_task = Label(root, text="Gorev Cubugu")
 Current_task.grid(row=5, column=1, columnspan=3)
 master.arducopter_arm()
 master.motors_armed_wait()
-moving = False
 def pwm_movement():
     start_time = time()
-    while time()<start_time+10:
+    global detected_image
+    while True:
         try:
+        #detection coordinates
             tlx,tly,w,h= recent_boxes[0]
-            if tlx<208<tlx+w:
-                
-                Current_task.config(text="EFE BURADA, ONU YAKALA!!!!")
-                send_pwm(x=500, z=500, roll=0)
-            elif tlx+w<208:
-                Current_task.config(text="EFE SOLDA")
-                send_pwm( x=300, z=500,roll=-100)
-            elif tlx>208:
-                Current_task.config(text="EFE sagda")
-                send_pwm(x=300, roll=100)
-            else:
-                send_pwm(roll=100)
-                Current_task.config(text="meh")
+            detectedMidx = tlx+w/2
+            detectedMidy = tly+h/2
+
+            #image corrdinates
+            imgWidth, imgHeight, _ = detected_image.shape
+            imgWidth_third = imgWidth/3
+            imgWidth_two_third = 2*imgWidth_third
+            
+            if detectedMidx<imgWidth_third:             #left
+                send_pwm(yaw=-300,z=320)
+            elif detectedMidx<imgWidth_two_third:       #middle
+                send_pwm(x=500,z=320)
+            else:                                       #right
+                send_pwm(yaw=300,z=320)
         except:
-            pass
+            send_pwm(yaw=400,z=300)
+        
 
 
 def toggle_video():
@@ -395,9 +431,9 @@ def toggle_video():
 def toggle_attitude():
     global attitude_update
     attitude_update = not attitude_update
-def toggle_movement():
+"""def toggle_movement():
     global moving
-    moving = not moving
+    moving = not moving"""
 def reset_function():
     pass
 
@@ -410,23 +446,23 @@ def toggle_arm():
         master.motors_armed_wait()
 
 ###Threads
-reset_button = Button(root, command=threading.Thread(target=pwm_movement).start, text="pwmmovemet")
+#reset_button = Button(root, command=threading.Thread(target=pwm_movement).start, text="pwmmovemet")
 video_button = Button(root, command=threading.Thread(target=video_main).start, text='Video Start')
 attitude_button = Button(root, command=threading.Thread(target=attitude_tk).start, text="Attitude Start")
 toggle_video_button = Button(root, command=toggle_video, text="Toggle Video")
 toggle_attitude_button = Button(root, command=toggle_attitude, text="Toggle Attitude")
 arm_button = Button(root, command=toggle_arm, text='arm-disarm')
-#efe_button = Button(root, command=pwm_movement, text="Efeyi ara")
+efe_button = Button(root, command=threading.Thread(target=pwm_movement).start, text="Efeyi ara")
 
 
 #Button Placement
-reset_button.grid(row=4, column=0)
+#reset_button.grid(row=4, column=0)
 video_button.grid(row=4, column=1)
 attitude_button.grid(row=4, column=2)
 toggle_attitude_button.grid(row=5, column=0)
 toggle_video_button.grid(row=5,column=1)
 arm_button.grid(row=5, column=2)
-#efe_button.grid(row=6, column=0)
+efe_button.grid(row=6, column=0)
 
 
 """videothread = threading.Thread(target=video_main)
