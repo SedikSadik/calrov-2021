@@ -60,7 +60,7 @@ def yolo_detection(raw_image):
     return raw_image, new_boxes
 
 ret, frame = cap.read()
-image = cv2.imread("/home/violetcheese/Documents/CALROV/photos/ 1 üst 50 derece 3.jpg")
+image = cv2.imread(os.path.abspath("photos/ 1 üst 50 derece 3.jpg"))
 print(cProfile.run("yolo_detection(image)"))
 PERSON_WIDTH_CM = 48
 FOCAL_LENGTH_PX = 462.92

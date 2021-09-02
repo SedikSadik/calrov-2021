@@ -4,7 +4,9 @@ from time import time as TM
 from datetime import datetime as dt
 import sys
 
-master = mavutil.mavlink_connection("udpin:192.168.2.1:14550")
+#udpin:192.168.2.1:14550
+
+master = mavutil.mavlink_connection("tcp:127.0.0.1:5760")
 master.wait_heartbeat()
 mode = 'STABILIZE'
 
@@ -45,13 +47,14 @@ master.motors_armed_wait()
 print('Armed!')
 
 
-def run_motors(run_time, x=0, y=0, z=500, yaw = 0, buttons = 0):
+def run_motors(run_time, x=0, y=0, z=0, yaw = 0, buttons = 0):
     """run_time = for how long is pwm sent"""
     t_start = int(TM())
     print(f"running for {run_time} seconds, with pwm x:{x},y={y}, z={z} \n yaw:{yaw}, buttons:{buttons}")
     while TM() < t_start+run_time:
         master.mav.manual_control_send(master.target_system, x,y,z,yaw,buttons)
 
+run_motors(12, y=400)
 
 master.arducopter_disarm()
 master.motors_disarmed_wait()

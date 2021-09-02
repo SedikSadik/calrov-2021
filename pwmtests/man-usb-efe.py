@@ -14,8 +14,10 @@ import datetime
 import os.path
 from random import random
 import sys
+#127.0.0.1:9002 bluesim
+#192.168.2.1:14550
 
-master = mavutil.mavlink_connection("udpin:192.168.2.1:14550")
+master = mavutil.mavlink_connection("udpin:127.0.0.1:9002")
 master.wait_heartbeat()
 print("Successful Connection!")
 

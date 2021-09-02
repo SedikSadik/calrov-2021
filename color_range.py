@@ -1,5 +1,7 @@
 import cv2
 import numpy as np
+import os
+
 image=cv2.imread('/home/violetcheese/Desktop/photo_naming/mixbatches/batch8frame6939.jpg')
 imgContour = image.copy()
 lower = [50, 110, 60]

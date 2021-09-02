@@ -67,7 +67,7 @@ def ratioToAngle(ratio:float) -> float:
 def ratioToAngle2(ratio:float) -> float:
     return -795.4162 + (91.44677+795.4162)/(1 + (ratio/2.579814)**(3.952141))
 
-image = cv2.imread("/home/violetcheese/Documents/CALROV/photos/1 aşşağı 50 derece 3.jpg")
+image = cv2.imread(os.path.abspath("photos/1 aşşağı 50 derece 3.jpg"))
 detectedImage , detectionBoxes = yolo_detection(image)
 w = detectionBoxes[0][2]
 h= detectionBoxes[0][3]

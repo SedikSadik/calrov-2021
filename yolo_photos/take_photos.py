@@ -6,7 +6,7 @@ import os
 
 perspective_names = ["true_center/", 'center_down/', 'center_up/', "left_center/", "left_up/", "left_down/", "right_up/", "right_center/", "right_down/","Joker/"]
 attempt_id="attempt1/"
-parent_path = "/home/violetcheese/Documents/CALROV/yolo_photos/"
+parent_path = os.path.abspath("yolo_photos/")
 os.mkdir(parent_path+attempt_id)
 for perspective_name in perspective_names:
     os.mkdir(parent_path+attempt_id+"perspective-"+perspective_name)

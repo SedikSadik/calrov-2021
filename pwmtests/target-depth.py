@@ -32,7 +32,7 @@ def set_target_depth(depth):
         #  (all not supported yet, ignored in GCS Mavlink)
     )
 
-def set_target_attitude(roll=0, pitch=0, yaw=0):
+def setTargetAttitude(roll=0, pitch=0, yaw=0):
     """ Sets the target attitude while in depth-hold mode.
 
     'roll', 'pitch', and 'yaw' are angles in degrees.
@@ -83,7 +83,7 @@ while not master.wait_heartbeat().custom_mode == DEPTH_HOLD_MODE:
     master.set_mode(DEPTH_HOLD)
 
 set_target_depth(-1.0)
-set_target_attitude(roll=0, pitch=0, yaw=0)
+setTargetAttitude(roll=0, pitch=0, yaw=0)
 
 run_motors(yaw=400, run_time=10)
 

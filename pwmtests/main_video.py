@@ -1,3 +1,4 @@
+from copy import Error
 import threading
 from tkinter import *
 from PIL import ImageTk, Image
@@ -10,7 +11,6 @@ import time
 from pymavlink import mavutil
 from math import pi as PI
 import threading
-import datetime
 import os.path
 from random import random, randint
 import sys
@@ -172,13 +172,15 @@ def videoMain():
             opencv_thread_in_main.join()
             del yolo_thread_in_main
             del opencv_thread_in_main
+    videoMain()
         
         
 
 lastYoloFrame: np.ndarray
 lastOpenCVFrame: np.ndarray
-def yoloVideo(frameYolo):
-    frame_start_time = time.time()
+
+def yoloVideo(frameYolo:np.ndarray):
+    frame_start_time: float = time.time()
     
     global recent_boxes
     
@@ -188,23 +190,31 @@ def yoloVideo(frameYolo):
 
     scaled_img = cv2.resize(cv2image,(height, width))
     """
-    detected_image, recent_boxes = yolo_detection(frameYolo)
-    
-    detected_image = cv2.cvtColor(detected_image , cv2.COLOR_BGR2RGB)
+    try:
+        tmp_boxes = yoloDetection(frameYolo)
+        
+        ##Draw 
+        if tmp_boxes and type(tmp_boxes[0])==list and  len(tmp_boxes[0])==4:
+            recent_boxes = tmp_boxes
+            w = recent_boxes[0][2]
+            h=  recent_boxes[0][3]
+            
+            cv2.rectangle(frameYolo, (int(recent_boxes[0][0]-w/2), int(recent_boxes[0][1]-h/2)), (int(recent_boxes[0][0]+w/2), int(recent_boxes[0][1]+h/2)),(0,0,0), thickness=2)
+    except:
+        pass
+    detected_image = cv2.cvtColor(frameYolo , cv2.COLOR_BGR2RGB)
     imgYolo = Image.fromarray(detected_image)
 
     #img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     imgtkYolo = ImageTk.PhotoImage(image=imgYolo)
     yolo_video.imgtk = imgtkYolo
     yolo_video.configure(image=imgtkYolo)
-    pwm_decide_once(detected_image, recent_boxes)
+    
+    #wmDecideOnce(detected_image, recent_boxes)
     
     ##FPS
     yolo_fps = 1.0/(time.time()-frame_start_time)
     yolo_fps_label.config(text=f"Fps: {yolo_fps}")
-
-
-
 
 lower_hsv = np.array([0, 0, 0])
 upper_hsv = np.array([180, 184, 147])
@@ -232,82 +242,14 @@ def opencvVideo(frameCV):
     
     opencv_fps = 1.0/(time.time()-opencv_start_time)
     opencv_fps_label.config(text=f"Fps: {opencv_fps}")
-#-------------------
 
+def toggleVideo():
+    if video_on.is_set():
+        video_on.clear()
+    else:
+        video_on.set()
 
-def send_pwm(x =0, y=0 , z = 500, yaw=0 , buttons=0):
-    """Send manual pwm to the axis of a joystick. 
-    Relative to the vehicle
-    x for right-left motion
-    y for forward-backwards motion
-    z for up-down motion
-    r for the yaw axis
-        clockwise is -1000
-        counterclockwise is 1000
-    buttons is an integer with 
-    """
-    master.mav.manual_control_send(master.target_system, x,y,z,yaw,buttons)
-
-def mode_set(mode_name):
-
-    if mode_name not in master.mode_mapping():
-        print('Unknown mode : {}'.format(mode_name))
-        print('Try:', list(master.mode_mapping().keys()))
-        sys.exit(1)
-    flight_mode_label.config(text=f"Flight Mode: {mode_name}")
-    mode_id = master.mode_mapping()[mode_name]
-    master.mav.set_mode_send(
-        master.target_system,
-        mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-        mode_id)
-    
-
-def pwm_decide_once(detected_image,recent_boxes):
-    try:
-        #detection coordinates
-        tlx,tly,w,h= recent_boxes[0]
-        detectedMidx = tlx+w/2
-        detectedMidy = tly+h/2
-
-        #image corrdinates
-        imgWidth, imgHeight, _ = detected_image.shape
-        imgWidth_third = imgWidth/3
-        imgWidth_two_third = 2*imgWidth_third
-        
-        if detectedMidx<imgWidth_third:             #left
-            #send_pwm(yaw=-400,z=150)
-            current_activity_label.config(text="Object found on the left")
-        elif detectedMidx<imgWidth_two_third:       #middle
-            #send_pwm(x=1000,z=150)
-            current_activity_label.config(text="Object found in the middle")
-            
-        else:                                       #right
-            # send_pwm(yaw=1000,z=250)
-            current_activity_label.config(text="Object found on the right")
-    except:
-        # send_pwm(yaw=1000,z=200)
-        current_activity_label.config(text="Object NOt Found")
-
-
-def request_message_interval(message_id: int, frequency_hz: float):
-    """
-    Request MAVLink message in a desired frequency,
-    documentation for SET_MESSAGE_INTERVAL:
-        https://mavlink.io/en/messages/common.html#MAV_CMD_SET_MESSAGE_INTERVAL
-
-    Args:
-        message_id (int): MAVLink message ID
-        frequency_hz (float): Desired frequency in Hz
-    """
-    master.mav.command_long_send(
-        master.target_system, master.target_component,
-        mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL, 0,
-        message_id, # MAVLINK mesaj tanimi
-        1e6 / frequency_hz, # Istenen frekans
-        0, # Hedef, (0=arac)
-        0, 0, 0, 0)
-
-
+##  SENSOR INPUT-----------------
 def statusUpdate():
     status_update.wait()
 
@@ -334,7 +276,7 @@ def statusUpdate():
         time.sleep(0.02)
     
 
-def generatorfunc():
+def generatorFunction():
     vals = []
     vals.append(randint(0,360))
     vals.append(randint(0,360))
@@ -344,7 +286,44 @@ def generatorfunc():
 
 
 
-def set_target_depth(depth):
+#VEHICLE CONFIG------------------
+
+
+def flightModeSet(mode_name):
+
+    if mode_name not in master.mode_mapping():
+        print('Unknown mode : {}'.format(mode_name))
+        print('Try:', list(master.mode_mapping().keys()))
+        sys.exit(1)
+    flight_mode_label.config(text=f"Flight Mode: {mode_name}")
+    mode_id = master.mode_mapping()[mode_name]
+    master.mav.set_mode_send(
+        master.target_system,
+        mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+        mode_id)
+
+
+
+def requestMessageInterval(message_id: int, frequency_hz: float):
+    """
+    Request MAVLink message in a desired frequency,
+    documentation for SET_MESSAGE_INTERVAL:
+        https://mavlink.io/en/messages/common.html#MAV_CMD_SET_MESSAGE_INTERVAL
+
+    Args:
+        message_id (int): MAVLink message ID
+        frequency_hz (float): Desired frequency in Hz
+    """
+    master.mav.command_long_send(
+        master.target_system, master.target_component,
+        mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL, 0,
+        message_id, # MAVLINK mesaj tanimi
+        1e6 / frequency_hz, # Istenen frekans
+        0, # Hedef, (0=arac)
+        0, 0, 0, 0)
+
+
+def setTargetDepth(depth):
     
     master.mav.set_position_target_global_int_send(
         int(1e3 * (time.time() - boot_time)), # ms since boot
@@ -358,20 +337,50 @@ def set_target_depth(depth):
         #  (all not supported yet, ignored in GCS Mavlink)
     )
 
-def toggleOnOff():
-    if not video_on.is_set():
-        video_on.set()
-        status_update.set()
-        toggleButton.config(text="CURRENT: ON")
-    else:
-        video_on.clear()
-        status_update.clear()
-        toggleButton.config(text="CURRENT: OFF")
 
-def startAllThreads():
-    status_update_thread.start()
-    video_main_thread.start()
 
+
+#VEHICLE CONTROL
+
+
+def pwmDecideOnce(detected_image,recent_boxes):
+    try:
+        #detection coordinates
+        tlx,tly,w,h= recent_boxes[0]
+        detectedMidx = tlx+w/2
+        detectedMidy = tly+h/2
+
+        #image corrdinates
+        imgWidth, imgHeight, _ = detected_image.shape
+        imgWidth_third = imgWidth/3
+        imgWidth_two_third = 2*imgWidth_third
+        
+        if detectedMidx<imgWidth_third:             #left
+            #send_pwm(yaw=-400,z=150)
+            current_activity_label.config(text="Object found on the left")
+        elif detectedMidx<imgWidth_two_third:       #middle
+            #send_pwm(x=1000,z=150)
+            current_activity_label.config(text="Object found in the middle")
+            
+        else:                                       #right
+            # send_pwm(yaw=1000,z=250)
+            current_activity_label.config(text="Object found on the right")
+    except:
+        # send_pwm(yaw=1000,z=200)
+        current_activity_label.config(text="Object NOt Found")
+
+def sendPwm(x =0, y=0 , z = 500, yaw=0 , buttons=0):
+    """Send manual pwm to the axis of a joystick. 
+    Relative to the vehicle
+    x for right-left motion
+    y for forward-backwards motion
+    z for up-down motion
+    r for the yaw axis
+        clockwise is -1000
+        counterclockwise is 1000
+    buttons is an integer with 
+    """
+    master.mav.manual_control_send(master.target_system, x,y,z,yaw,buttons)
 
 #------------------------------------------
 net = cv2.dnn.readNet(os.path.abspath('Yolo_files/yolov4-tiny.weights'),os.path.abspath('Yolo_files/yolov4-tiny.cfg'))
@@ -381,12 +390,13 @@ with open(os.path.abspath('Yolo_files/coco.names'), 'r') as f:
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]
 
-def yolo_detection(raw_image):
+def yoloDetection(raw_image) ->list:
     """Take in as input a cv2 image"""
     class_ids = []
     confidences = []
     boxes = []
-    height , width, _ = raw_image.shape
+    height = raw_image.shape[0]
+    width  = raw_image.shape[1]
     blob = cv2.dnn.blobFromImage(raw_image, 0.00392, (416,416), (0,0,0), True, crop=False)
     net.setInput(blob)
     outs = net.forward(output_layers)
@@ -401,26 +411,19 @@ def yolo_detection(raw_image):
                 center_y = int(detection[1]*height)
                 w = int(detection[2]*width)
                 h = int(detection[3]*height)
-                ##Rectangle Draw
-                topleft_x = int(center_x-(w/2))
-                topleft_y = int(center_y-(h/2))
 
-                boxes.append([topleft_x,topleft_y,w,h])
+                boxes.append([center_x, center_y,w,h])
                 confidences.append(float(confidence))
                 class_ids.append(class_id)
+    
     indexes = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
-    #DISPLAY DETECTION
-    total_detections = len(boxes)
-    for i in range(total_detections):
-        if i in indexes:
-            topleft_x, topleft_y, w,h = boxes[i]
-            label = detection_classes[class_ids[i]]
-            recognition_label.config(text=f"{label} bulundu")
-            cv2.rectangle(raw_image, (topleft_x,topleft_y), (topleft_x+w,topleft_y+h), (0,100,255), 1)
-            cv2.putText(raw_image, label, (topleft_x, topleft_y),cv2.FONT_HERSHEY_COMPLEX,1,(0,165,255))
+
+    if len(indexes)>0:
+        new_boxes = [boxes[index] for index in indexes[0]]
+        return new_boxes
+    
 
 
-    return raw_image, boxes
 
 #--------------------------------------------
 
@@ -436,20 +439,20 @@ def toggleArm():
         arm_status_label.config(text="Vehicle Status: Armed")
 
 
-# master = mavutil.mavlink_connection("udpin:192.168.2.1:14550")
-# master.wait_heartbeat()
-# print("Successful Connection!")
+
+def startAllThreads():
+    status_update_thread.start()
+    video_main_thread.start()
 
 
 
 
 
 
-
-
-
+##ROOT
 root=Tk()
 root.title("CALROV GUI")
+
 ##Icon
 icon = Image.open(os.path.abspath('gui_images/calrov_logo.jpg'))
 icon = ImageTk.PhotoImage(icon)
@@ -484,11 +487,6 @@ def eventReverser(Event:threading.Event):
         Event.clear()
     else:
         Event.set()
-def toggleVideo():
-    if video_on.is_set():
-        video_on.clear()
-    else:
-        video_on.set()
 
 # yolo_video_thread = threading.Thread(target=yoloVideo)
 # opencv_video_thread  = threading.Thread(target=opencvVideo)
@@ -506,13 +504,16 @@ button_frame = Frame(root, bg="white")
 button_frame.config(width=416,height=416)
 button_frame.grid(row=3, column=0)
 
-startThreadsButton = Button(button_frame, text="Start all threads", command=startAllThreads)
+startThreadsButton = Button(button_frame, text="Start all threads", 
+                        command=startAllThreads)
 startThreadsButton.grid()
 
-startVideoButton = Button(button_frame, text='Toggle Video',command=toggleVideo )
+startVideoButton = Button(button_frame, text='Toggle Video',
+                        command=toggleVideo )
 startVideoButton.grid()
 
-toggle_arm_disarm = Button(button_frame, text='Toggle Arm/Disarm', command=toggleArm)
+toggle_arm_disarm = Button(button_frame, text='Toggle Arm/Disarm',
+                        command=toggleArm)
 toggle_arm_disarm.grid()
 
 
@@ -524,8 +525,8 @@ toggle_arm_disarm.grid()
 
 #status_update_button = Button(button_frame, text='Status Update', command=status_update_thread.start)
 
-toggleButton = Button(button_frame, text='Toggle All Activity', command=toggleOnOff)
-toggleButton.grid()
+# toggleButton = Button(button_frame, text='Toggle All Activity', command=toggleOnOff)
+# toggleButton.grid()
 #BUtton Display
 
 
