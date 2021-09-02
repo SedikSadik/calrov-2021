@@ -23,7 +23,6 @@ boot_time = time()
 class Video():
 
     """BlueRov video capture class constructor
-
     Attributes:
         port (int): Video UDP port
         video_codec (string): Source h264 parser
@@ -36,7 +35,6 @@ class Video():
 
     def __init__(self, port=5600):
         """Summary
-
         Args:
             port (int, optional): UDP port
         """
@@ -72,7 +70,6 @@ class Video():
                 '! videoconvert ! video/x-raw,format=(string)BGR ! videoconvert',
                 '! appsink'
             ]
-
         Args:
             config (list, optional): Gstreamer pileline description list
         """
@@ -93,10 +90,8 @@ class Video():
     @staticmethod
     def gst_to_opencv(sample):
         """Transform byte array into np array
-
         Args:
             sample (TYPE): Description
-
         Returns:
             TYPE: Description
         """
@@ -113,7 +108,6 @@ class Video():
 
     def frame(self):
         """ Get Frame
-
         Returns:
             iterable: bool and image frame, cap.read() output
         """
@@ -121,7 +115,6 @@ class Video():
 
     def frame_available(self):
         """Check if frame is available
-
         Returns:
             bool: true if frame is available
         """
@@ -161,7 +154,6 @@ def yoloVideo():
             frameYolo = cv2.resize(frameYolo, (416,416))
             """cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #BGR RGB dönüşümü
             height, width = (int(cv2image.shape[1]*img_scale),int(cv2image.shape[0]*img_scale))
-
             scaled_img = cv2.resize(cv2image,(height, width))
             """
             detected_image, recent_boxes = yolo_detection(frameYolo)
@@ -256,17 +248,17 @@ def pwm_decide_once(detected_image,recent_boxes):
         imgWidth_two_third = 2*imgWidth_third
         
         if detectedMidx<imgWidth_third:             #left
-            #send_pwm(yaw=-400)
+            send_pwm(yaw=-600, z=75)
             current_activity_label.config(text="Object found on the left",font =("Courier", 10))
         elif detectedMidx<imgWidth_two_third:       #middle
-            #send_pwm(x=400)
+            send_pwm(x=750, z=75)
             current_activity_label.config(text="Object found in the middle",font =("Courier", 10))
             
         else:                                       #right
-            # send_pwm(yaw=400)
+            send_pwm(yaw=600, z=75)
             current_activity_label.config(text="Object found on the right",font =("Courier", 10))
     except:
-        # send_pwm(yaw=400)
+        send_pwm(yaw=600, z=75)
         current_activity_label.config(text="Object NOt Found", font =("Courier", 10))
 video_on = True
 
@@ -275,7 +267,6 @@ def request_message_interval(message_id: int, frequency_hz: float):
     Request MAVLink message in a desired frequency,
     documentation for SET_MESSAGE_INTERVAL:
         https://mavlink.io/en/messages/common.html#MAV_CMD_SET_MESSAGE_INTERVAL
-
     Args:
         message_id (int): MAVLink message ID
         frequency_hz (float): Desired frequency in Hz
@@ -327,10 +318,10 @@ def generatorfunc():
 def set_target_depth(depth):
     
     master.mav.set_position_target_global_int_send(
-        int(1e3 * (time.time() - boot_time)), # ms since boot
+        int(1e3 * (time() - boot_time)), # ms since boot
         master.target_system, master.target_component,
         coordinate_frame=mavutil.mavlink.MAV_FRAME_GLOBAL_INT,
-        type_mask=0xdfb,  # ignore everything except z position
+        type_mask=0xdfe,  # ignore everything except z position
         lat_int=0, lon_int=0, alt=depth, # (x, y WGS84 frame pos - not used), z [m]
         vx=0, vy=0, vz=0, # velocities in NED frame [m/s] (not used)
         afx=0, afy=0, afz=0, yaw=0, yaw_rate=0
@@ -344,9 +335,9 @@ def resetAll():
     status_update = False
 
 #------------------------------------------
-net = cv2.dnn.readNet(os.path.abspath('./GUI/Yolo_files/yolov4-tiny.weights'),os.path.abspath('./GUI/Yolo_files/yolov4-tiny.cfg'))
+net = cv2.dnn.readNet(os.path.abspath('./GUI/Yolo_files/yolo-custom_3000.weights'),os.path.abspath('./GUI/Yolo_files/yolo-custom.cfg'))
 detection_classes = []
-with open(os.path.abspath('./GUI/Yolo_files/coco.names'), 'r') as f:
+with open(os.path.abspath('./GUI/Yolo_files/obj.names'), 'r') as f:
     detection_classes = [line.strip() for line in f.readlines()]
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]
@@ -542,11 +533,11 @@ current_activity_label.grid()
 if __name__ == "__main__":
     toggleStart()
     
-    DEPTH_HOLD = 'ALT_HOLD'
+    DEPTH_HOLD = 'MANUAL'
     DEPTH_HOLD_MODE = master.mode_mapping()[DEPTH_HOLD]
 
     while not master.wait_heartbeat().custom_mode == DEPTH_HOLD_MODE:
         master.set_mode(DEPTH_HOLD)
-    set_target_depth(-1.0)
+    #set_target_depth(-1)
     servo_label.config(text="Servo Not Attached")
     root.mainloop()

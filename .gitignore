@@ -6,3 +6,4 @@ masks/
 __pycache__
 GUI/Yolo_files/yolov3-tiny.weights
 GUI/Yolo_files/yolov4.weights
+photos/

@@ -1,4 +1,3 @@
-from re import L
 import threading
 from tkinter import *
 from PIL import ImageTk, Image
@@ -7,7 +6,7 @@ import gi
 gi.require_version("Gst", "1.0")
 from gi.repository import Gst
 import numpy as np
-from time import sleep, time
+import time
 from pymavlink import mavutil
 from math import pi as PI
 import threading
@@ -16,8 +15,10 @@ import os.path
 from random import random, randint
 import sys
 
+import cProfile
+Profiler = cProfile.Profile()
 master = None
-boot_time = time()
+boot_time = time.time()
 #-------------------------------
 class Video():
 
@@ -147,42 +148,90 @@ class Video():
 
         return Gst.FlowReturn.OK
 video = Video(port=4777)
-video_on = True
-def yoloVideo():
-    frame_start_time = time()
+cap = cv2.VideoCapture(0)
+if not cap.isOpened():
+    print("Cannot open camera")
+    exit()
+
+recent_boxes = []
+
+def videoMain():
+    video_on.wait()
+
+    while video_on.is_set():
+
+        ret , video_frame = cap.read()
+        if ret:
+            yolo_thread_in_main = threading.Thread(target=yoloVideo, args=(video_frame,))
+            opencv_thread_in_main = threading.Thread(target=opencvVideo, args=(video_frame,))
+
+            yolo_thread_in_main.start()
+            opencv_thread_in_main.start()
+
+            yolo_thread_in_main.join()
+            opencv_thread_in_main.join()
+            del yolo_thread_in_main
+            del opencv_thread_in_main
+        
+        
+
+lastYoloFrame: np.ndarray
+lastOpenCVFrame: np.ndarray
+def yoloVideo(frameYolo):
+    frame_start_time = time.time()
     
     global recent_boxes
+    
+    frameYolo = cv2.resize(frameYolo, (416,416))
+    """cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #BGR RGB dönüşümü
+    height, width = (int(cv2image.shape[1]*img_scale),int(cv2image.shape[0]*img_scale))
 
-    if video_on:
-        ret, frame = cap.read()
-        if ret:
-            frame = cv2.resize(frame, (416,416))
-            """cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #BGR RGB dönüşümü
-            height, width = (int(cv2image.shape[1]*img_scale),int(cv2image.shape[0]*img_scale))
+    scaled_img = cv2.resize(cv2image,(height, width))
+    """
+    detected_image, recent_boxes = yolo_detection(frameYolo)
+    
+    detected_image = cv2.cvtColor(detected_image , cv2.COLOR_BGR2RGB)
+    imgYolo = Image.fromarray(detected_image)
 
-            scaled_img = cv2.resize(cv2image,(height, width))
-            """
-            detected_image, recent_boxes = yolo_detection(frame)
-            
-            detected_image = cv2.cvtColor(detected_image , cv2.COLOR_BGR2RGB)
-            img = Image.fromarray(detected_image)
-
-            #img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            imgtk = ImageTk.PhotoImage(image=img)
-            yolo_video.imgtk = imgtk
-            yolo_video.configure(image=imgtk)
-            #pwm_decide_once(detected_image, recent_boxes)
-            
-            yolo_fps = 1.0/(time()-frame_start_time)
-            yolo_fps_label.config(text=f"Fps: {yolo_fps}")
-        yolo_video.after(1,yoloVideo)
-    else:
-        yolo_video_thread.join()
-        
-def opencvVideo():
-    pass
+    #img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    imgtkYolo = ImageTk.PhotoImage(image=imgYolo)
+    yolo_video.imgtk = imgtkYolo
+    yolo_video.configure(image=imgtkYolo)
+    pwm_decide_once(detected_image, recent_boxes)
+    
+    ##FPS
+    yolo_fps = 1.0/(time.time()-frame_start_time)
+    yolo_fps_label.config(text=f"Fps: {yolo_fps}")
 
 
+
+
+lower_hsv = np.array([0, 0, 0])
+upper_hsv = np.array([180, 184, 147])
+
+def opencvVideo(frameCV):
+
+    opencv_start_time = time.time()
+    
+    
+    frameCV = cv2.resize(frameCV, (416,416))
+    hsvCV = cv2.cvtColor(frameCV, cv2.COLOR_BGR2HSV)
+    
+    
+    maskCV = cv2.inRange(hsvCV, lower_hsv, upper_hsv)
+
+    resultArrayCV = cv2.bitwise_and(frameCV, frameCV, mask=maskCV)
+
+    RGBresultArrayCV = cv2.cvtColor(resultArrayCV, cv2.COLOR_BGR2RGB)
+    resultCV = Image.fromarray(RGBresultArrayCV)
+    imgtkCV = ImageTk.PhotoImage(image=resultCV)
+    
+    opencv_video.imgtk = imgtkCV
+    opencv_video.configure(image=imgtkCV)
+    #pwm_decide_once(detected_image, recent_boxes)
+    
+    opencv_fps = 1.0/(time.time()-opencv_start_time)
+    opencv_fps_label.config(text=f"Fps: {opencv_fps}")
 #-------------------
 
 
@@ -227,15 +276,18 @@ def pwm_decide_once(detected_image,recent_boxes):
         
         if detectedMidx<imgWidth_third:             #left
             #send_pwm(yaw=-400,z=150)
-            pass
+            current_activity_label.config(text="Object found on the left")
         elif detectedMidx<imgWidth_two_third:       #middle
             #send_pwm(x=1000,z=150)
-            pass
+            current_activity_label.config(text="Object found in the middle")
+            
         else:                                       #right
-            send_pwm(yaw=1000,z=250)
+            # send_pwm(yaw=1000,z=250)
+            current_activity_label.config(text="Object found on the right")
     except:
-        send_pwm(yaw=1000,z=200)
-video_on = True
+        # send_pwm(yaw=1000,z=200)
+        current_activity_label.config(text="Object NOt Found")
+
 
 def request_message_interval(message_id: int, frequency_hz: float):
     """
@@ -255,26 +307,21 @@ def request_message_interval(message_id: int, frequency_hz: float):
         0, # Hedef, (0=arac)
         0, 0, 0, 0)
 
-status_update = True
-def statusUpdate():
-    
-    '''
-    global roll_value
-    global pitch_value
-    global yaw_value
-    '''
 
-    if status_update:
-        
+def statusUpdate():
+    status_update.wait()
+
+    while status_update.is_set():
+
         try:
             rcvpacket = master.recv_match().to_dict()
         except:
             rcvpacket = None
-        r,p,y,d = generatorfunc().pop(0), generatorfunc().pop(0), generatorfunc().pop(0), generatorfunc().pop(0)
-        roll_label.config(text=f'Roll: {r}')
-        pitch_label.config(text=f'Pitch: {p}')
-        yaw_label.config(text=f'Yaw: {y}')
-        depth_label.config(text=f'depth: {d}')
+        #r,p,y,d = generatorfunc().pop(0), generatorfunc().pop(0), generatorfunc().pop(0), generatorfunc().pop(0)
+        roll_label.config(text=f'Roll: ')
+        pitch_label.config(text=f'Pitch: ')
+        yaw_label.config(text=f'Yaw: ')
+        depth_label.config(text=f'depth: ')
         # if rcvpacket['mavpackettype']=='ATTITUDE' or rcvpacket['macpackettype']=='AHRS2':
         #     roll_value= int(100* rcvpacket['roll'])
         #     pitch_value = int(100* rcvpacket['pitch'])
@@ -284,9 +331,8 @@ def statusUpdate():
         #     pitch_label.config(text=f'Pitch: {pitch_value}')
         #     yaw_label.config(text=f'Yaw: {yaw_value}')
         #     #tuple halinde istenen verilerin alınması
-        roll_label.after(1, statusUpdate)
-    else:
-        status_update_thread.join()
+        time.sleep(0.02)
+    
 
 def generatorfunc():
     vals = []
@@ -311,6 +357,22 @@ def set_target_depth(depth):
         # accelerations in NED frame [N], yaw, yaw_rate
         #  (all not supported yet, ignored in GCS Mavlink)
     )
+
+def toggleOnOff():
+    if not video_on.is_set():
+        video_on.set()
+        status_update.set()
+        toggleButton.config(text="CURRENT: ON")
+    else:
+        video_on.clear()
+        status_update.clear()
+        toggleButton.config(text="CURRENT: OFF")
+
+def startAllThreads():
+    status_update_thread.start()
+    video_main_thread.start()
+
+
 #------------------------------------------
 net = cv2.dnn.readNet(os.path.abspath('./GUI/Yolo_files/yolov4-tiny.weights'),os.path.abspath('./GUI/Yolo_files/yolov4-tiny.cfg'))
 detection_classes = []
@@ -361,17 +423,7 @@ def yolo_detection(raw_image):
     return raw_image, boxes
 
 #--------------------------------------------
-def toggleVideo():
-    global video_on
-    video_on = not video_on
-# def toggle_attitude():
-#     global attitude_update
-#     attitude_update = not attitude_update
-"""def toggle_movement():
-    global moving
-    moving = not moving"""
-def toggleStart():
-    pass
+
 
 def toggleArm():
     if master.motors_armed():
@@ -392,15 +444,9 @@ def toggleArm():
 
 
 
-###  GLOBAL VARIABLES AND OBJECTS
-cap = cv2.VideoCapture(0)
-if not cap.isOpened():
-    print("Cannot open camera")
-    exit()
 
-recent_boxes = []
 
-video_on = True
+
 
 root=Tk()
 root.title("CALROV GUI")
@@ -433,42 +479,67 @@ opencv_fps_label = Label(video_app, text="Opencv Fps: 0")
 opencv_fps_label.grid(row=2 , column=1)
 
 ###THREADS
-yolo_video_thread = threading.Thread(target=yoloVideo)
-opencv_video_thread  = threading.Thread(target=opencvVideo)
+def eventReverser(Event:threading.Event):
+    if Event.is_set():
+        Event.clear()
+    else:
+        Event.set()
+def toggleVideo():
+    if video_on.is_set():
+        video_on.clear()
+    else:
+        video_on.set()
+
+# yolo_video_thread = threading.Thread(target=yoloVideo)
+# opencv_video_thread  = threading.Thread(target=opencvVideo)
+
 status_update_thread = threading.Thread(target=statusUpdate)
+video_main_thread = threading.Thread(target=videoMain)
+
+status_update = threading.Event()
+video_on = threading.Event()
+
 ###BUTTONS
 
 
 button_frame = Frame(root, bg="white")
 button_frame.config(width=416,height=416)
-toggle_stop_start = Button(button_frame, text='Toggle Stop/Start',
-                            command=toggleStart)
-toggle_arm_disarm = Button(button_frame, text='Toggle Arm/Disarm', 
-                            command=toggleArm)
-
-servo_open = Button(button_frame, text='Open Servo')
-servo_close = Button(button_frame, text='Close Servo')
-
-yolo_video_button = Button(button_frame, command=yolo_video_thread.start, text='Toggle YOLO Display')
-opencv_video_button = Button(button_frame, text='Toggle Opencv Display', command = opencv_video_thread.start)
-
-status_update_button = Button(button_frame, text='Status Update', command=status_update_thread.start)
-button6 = Button(button_frame, text='button6')
-
-## BUtton Display
 button_frame.grid(row=3, column=0)
 
-toggle_stop_start.grid()
+startThreadsButton = Button(button_frame, text="Start all threads", command=startAllThreads)
+startThreadsButton.grid()
+
+startVideoButton = Button(button_frame, text='Toggle Video',command=toggleVideo )
+startVideoButton.grid()
+
+toggle_arm_disarm = Button(button_frame, text='Toggle Arm/Disarm', command=toggleArm)
 toggle_arm_disarm.grid()
 
-servo_open.grid()
-servo_close.grid()
 
-yolo_video_button.grid()
-opencv_video_button.grid()
+#servo_open = Button(button_frame, text='Stop All Activity')
+# servo_close = Button(button_frame, text='Close Servo')
 
-status_update_button.grid()
-button6.grid()
+# yolo_video_button = Button(button_frame, command=yolo_video_thread.start, text='Toggle YOLO Display')
+# opencv_video_button = Button(button_frame, text='Toggle Opencv Display', command = opencv_video_thread.start)
+
+#status_update_button = Button(button_frame, text='Status Update', command=status_update_thread.start)
+
+toggleButton = Button(button_frame, text='Toggle All Activity', command=toggleOnOff)
+toggleButton.grid()
+#BUtton Display
+
+
+
+
+
+# servo_open.grid()
+# servo_close.grid()
+
+# yolo_video_button.grid()
+# opencv_video_button.grid()
+
+#status_update_button.grid()
+
 
 ### VEHICLE STATUS DISPLAY
 status_frame = Frame(root)
@@ -502,8 +573,23 @@ depth_label.grid()
 servo_label.grid()
 recognition_label.grid()
 
-
+current_activity_label.grid()
 ###BUTTONS
+def main():
+    pass
 
 if __name__ == "__main__":
+    arm_status_label.config(text="Vehicle Status Disarmed")
+    flight_mode_label.config(text="Flight Mode: ALT_HOLD")
+    servo_label.config(text="Servo Not Attached")
+
     root.mainloop()
+    
+    #main()
+
+
+
+
+
+
+

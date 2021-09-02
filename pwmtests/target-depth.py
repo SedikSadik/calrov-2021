@@ -1,12 +1,14 @@
 from pymavlink import mavutil
 import time
-
+from pymavlink.quaternion import QuaternionBase
+import math
 
 
 master = mavutil.mavlink_connection("udpin:192.168.2.1:14550")
 master.wait_heartbeat()
 boot_time = time.time()
 print("Successful Connection")
+
 
 def set_target_depth(depth):
     """ Sets the target depth while in depth-hold mode.
@@ -21,7 +23,7 @@ def set_target_depth(depth):
         int(1e3 * (time.time() - boot_time)), # ms since boot
         master.target_system, master.target_component,
         coordinate_frame=mavutil.mavlink.MAV_FRAME_GLOBAL_INT,
-        type_mask=0xdfe, 
+        type_mask=0xdfb, 
         #type_mask = 0b110111111110 ,  # ignore everything except z position
         lat_int=0, lon_int=0, alt=depth, # (x, y WGS84 frame pos - not used), z [m]
         vx=0, vy=0, vz=0, # velocities in NED frame [m/s] (not used)
@@ -29,6 +31,26 @@ def set_target_depth(depth):
         # accelerations in NED frame [N], yaw, yaw_rate
         #  (all not supported yet, ignored in GCS Mavlink)
     )
+
+def set_target_attitude(roll=0, pitch=0, yaw=0):
+    """ Sets the target attitude while in depth-hold mode.
+
+    'roll', 'pitch', and 'yaw' are angles in degrees.
+
+    """
+    # https://mavlink.io/en/messages/common.html#ATTITUDE_TARGET_TYPEMASK
+    # 1<<6 = THROTTLE_IGNORE -> allow throttle to be controlled by depth_hold mode
+    bitmask = 1<<6
+
+    master.mav.set_attitude_target_send(
+        int(1e3 * (time.time() - boot_time)), # ms since boot
+        master.target_system, master.target_component,
+        bitmask,
+        # -> attitude quaternion (w, x, y, z | zero-rotation is 1, 0, 0, 0)
+        QuaternionBase([math.radians(angle) for angle in (roll, pitch, yaw)]),
+        0, 0, 0, 0 # roll rate, pitch rate, yaw rate, thrust
+    )
+
 def send_pwm(x =0, y=0 , z = 500, yaw=0 , buttons=0):
     """Send manual pwm to the axis of a joystick. 
     Relative to the vehicle
@@ -61,6 +83,7 @@ while not master.wait_heartbeat().custom_mode == DEPTH_HOLD_MODE:
     master.set_mode(DEPTH_HOLD)
 
 set_target_depth(-1.0)
+set_target_attitude(roll=0, pitch=0, yaw=0)
 
 run_motors(yaw=400, run_time=10)
 
