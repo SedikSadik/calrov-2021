@@ -1,4 +1,3 @@
-from copy import Error
 import threading
 from tkinter import *
 from PIL import ImageTk, Image
@@ -11,7 +10,6 @@ import numpy as np
 import time
 from pymavlink import mavutil
 import math
-
 import threading
 import os.path
 import sys
@@ -162,6 +160,8 @@ def videoMain():
         
         if video.frame_available():
             video_frame = video.frame()
+            frameCV = cv2.resize(frameCV, (416,416))
+
             yolo_thread_in_main = threading.Thread(target=yoloVideo, args=(video_frame,))
             opencv_thread_in_main = threading.Thread(target=opencvVideo, args=(video_frame,))
 
@@ -180,7 +180,6 @@ def yoloVideo(frameYolo:np.ndarray):
     
     global recent_boxes
     
-    frameYolo = cv2.resize(frameYolo, (416,416))
     """cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #BGR RGB dönüşümü
     height, width = (int(cv2image.shape[1]*img_scale),int(cv2image.shape[0]*img_scale))
 
@@ -195,7 +194,11 @@ def yoloVideo(frameYolo:np.ndarray):
             w = recent_boxes[0][2]
             h=  recent_boxes[0][3]
             
-            cv2.rectangle(frameYolo, (int(recent_boxes[0][0]-w/2), int(recent_boxes[0][1]-h/2)), (int(recent_boxes[0][0]+w/2), int(recent_boxes[0][1]+h/2)),(0,0,0), thickness=2)
+            cv2.rectangle(frameYolo,
+            (int(recent_boxes[0][0]-w/2),int(recent_boxes[0][1]-h/2)),
+            (int(recent_boxes[0][0]+w/2),int(recent_boxes[0][1]+h/2)),
+            (0,0,0), thickness=1)
+            recognition_label.config(text=f"Object is {208-recent_boxes[0][0]} pixels from the center")
     except:
         pass
 
@@ -220,7 +223,6 @@ def opencvVideo(frameCV):
     opencv_start_time = time.time()
     
     
-    frameCV = cv2.resize(frameCV, (416,416))
     hsvCV = cv2.cvtColor(frameCV, cv2.COLOR_BGR2HSV)
     
     
@@ -425,7 +427,7 @@ class OtonomVehicle():
     def phaseOne(self) -> None:
         """Spin until you find the frame"""
         self.phase_finding_start.wait()  ## IF Phase one is active
-
+        current_activity_label.config(text="Phase 1: Find the Frame")
         while self.phase_finding_start.is_set():
             if len(recent_boxes[0]) != 0: ##recent_boxes has a value
                 sendPwm(yaw=self.proportionalYawValue+self.integralYawValue+self.derivativeYawValue)
@@ -440,7 +442,7 @@ class OtonomVehicle():
     def phaseTwo(self) -> None:
         """Determines the turn direction"""
         self.phase_locationtest_start.wait() ## IF Phase two is active
-        
+        current_activity_label.config(text="Phase 2: Find your turn Direction")
         while self.phase_locationtest_start.is_set():
             startTime = time.time()
             startRatio = recent_boxes[0][2]/recent_boxes[0][3]
@@ -460,6 +462,7 @@ class OtonomVehicle():
 
     def phaseThree(self)-> None:
         self.phase_alignment_start.wait()  ## IF Phase three is active
+        current_activity_label.config(text="Phase 3: Alignment")
         while self.phase_alignment_start.is_set():
             if recent_boxes[0][2]/recent_boxes[0][3]>1.3 and recent_boxes[0][0]<238 and recent_boxes[0][0]>178: ##at most 60 pixel fail
                 self.phase_alignment_start.clear()
@@ -472,7 +475,7 @@ class OtonomVehicle():
 
     def phaseFour(self) -> None:
         self.phase_end_start.wait()   ## IF Phase four is active
-        
+        current_activity_label.config(text="Phase 4: Straight ahaid, End")
         while self.phase_end_start.is_set():
             #sendPwm(x=400) #If yaw makes it worse somehow
             sendPwm(x=400, yaw=self.proportionalYawValue/3) ## Yaw tries to correct mistakes
@@ -697,8 +700,94 @@ recognition_label.grid()
 
 current_activity_label.grid()
 
+
+
+
+mavlink = mavutil.mavlink
+
+
+class WriteLockedFile(object):
+    """ A file with thread-locked writing. """
+    def __init__(self, file):
+        self._base_file = file
+        self._write_lock = threading.Lock()
+        
+    def write(self, *args, **kwargs):
+        with self._write_lock:
+            self._base_file.write(*args, **kwargs)
+    
+    def __getattr__(self, name):
+        return getattr(self._base_file, name)
+    
+    def __dir__(self):
+        return dir(self._base_file) + ["_base_file", "_write_lock"]
+
+
+class mavactive(object):
+    """ A class for managing an active mavlink connection. """
+    def __init__(self, connection, type_=mavlink.MAV_TYPE_GENERIC, autopilot=mavlink.MAV_AUTOPILOT_INVALID, base_mode=0, custom_mode=0,
+                 mavlink_version=0, heartbeat_period=0.95):
+        """ Initialises the program state and starts the heartbeat thread. """
+        self.connection = connection
+        self.type = type_
+        self.autopilot = autopilot
+        self.base_mode = base_mode
+        self.custom_mode = custom_mode
+        self.mavlink_version = mavlink_version
+        self.heartbeat_period = heartbeat_period
+        
+        # replace internal file with a thread-safe one
+        self.connection.mav.file = WriteLockedFile(self.connection.mav.file)
+        # set up the kill event and initialise the heartbeat thread
+        self._kill = threading.Event()
+        self._birth()
+
+    def _birth(self):
+        """ Creates and starts the heartbeat thread. """
+        self._kill.clear()
+        self.heartbeat_thread = threading.Thread(target=self.heartbeat_repeat)
+        self.heartbeat_thread.start()
+
+    @property
+    def is_alive(self):
+        return not self._kill.is_set()
+
+    def heartbeat_repeat(self):
+        """ Sends a heartbeat to 'self.connection' with 'self.heartbeat_period'. """
+        while self.is_alive:
+            self.connection.mav.heartbeat_send(
+                self.type,
+                self.autopilot,
+                self.base_mode,
+                self.custom_mode,
+                self.mavlink_version
+            )
+            time.sleep(self.heartbeat_period)
+
+    def kill(self):
+        """ Stops the heartbeat, if not already dead. """
+        if not self.is_alive:
+            return # already dead
+
+        self._kill.set()
+        self.heartbeat_thread.join()
+        del self.heartbeat_thread
+
+    def revive(self):
+        """ Starts the heartbeat, if not already alive. """
+        if self.is_alive:
+            return # already alive
+
+        self._birth()
+
+    def __del__(self):
+        """ End the thread cleanly on program end. """
+        self.kill()
+
+heartbeatPulser = mavactive(master)
 ###MAIN SETUP
 def main():
+    heartbeatPulser.heartbeat_repeat()
     ###Vehicle Armed
     arm_status_label.config(text="Vehicle Status Disarmed")
     master.arducopter_arm()
@@ -717,7 +806,8 @@ def main():
     ##Manipulator Servo
     manipulator_servo_label.config(text="Servo Not Attached")
     
-    
+    ##Message Interval
+    requestMessageInterval()
 
     ##Target Depth and Attitude
     setTargetDepth(-1)

@@ -1,4 +1,4 @@
-from pwmtests.main_video import setTargetDepth
+import cProfile
 import threading
 import os
 import cv2
@@ -30,7 +30,7 @@ class OtonomVehicle():
         self.frameDim = 416
         self.frameMid = 208
         self.kp = 1.0
-        self.ki = 0.00002
+        self.ki = 0.002
         self.kd = -0.5
         self.preTotal = 0
         self.lastPositionMid = 0
@@ -46,7 +46,7 @@ class OtonomVehicle():
         self.phase_finding_start.clear()
         self.phase_locationtest_start.clear()
         self.phase_alignment_start.clear()
-        self.phase_end_start.set()
+        self.phase_end_start.clear()
 
         self.phase_finding_thread = threading.Thread(target=self.phaseOne)
         self.phase_finding_thread.start()
@@ -66,9 +66,10 @@ class OtonomVehicle():
     
     @property
     def integralYawValue(self):
-        if self.preTotal>50:
-            self.preTotal=40
         self.preTotal += self.ki * (208-recent_boxes[0][0])
+        if self.preTotal>50:
+            self.preTotal=50
+
         return self.preTotal
     
     @property
@@ -85,7 +86,7 @@ class OtonomVehicle():
         while self.phase_finding_start.is_set():
             if len(recent_boxes[0]) != 0: ##recent_boxes has a value
                 send_pwm(yaw=self.proportionalYawValue+self.integralYawValue+self.derivativeYawValue)
-                if 178 < recent_boxes[0] < 238: ##Close to center
+                if 178 < recent_boxes[0] < 238: ##Close to center 60 pixel leniency
                     self.phase_finding_start.clear()
                     self.phase_locationtest_start.set()
             else:
@@ -102,13 +103,14 @@ class OtonomVehicle():
             startRatio = recent_boxes[0][2]/recent_boxes[0][3]
 
             while time.time()<startTime+6:
-                send_pwm(y=500*self.turn, yaw=-200*self.turn+self.proportionalYawValue) ##c-clockwise
+                send_pwm(y=500*self.turn, yaw=self.proportionalYawValue) ##c-clockwise
             endRatio = recent_boxes[0][2]/recent_boxes[0][3]
             if endRatio>startRatio:
-                self.turn = -1 ## clockwise turn around the frame
+                self.turn = 1 ## c-clockwise turn around the frame
             else:
-                self.turn = 1 ## counterclockwise turn
+                self.turn = -1 ## clockwise turn
             self.phase_locationtest_start.clear()
+            self.phase_alignment_start.set()
 
         self.phaseTwo()
             
@@ -116,10 +118,11 @@ class OtonomVehicle():
     def phaseThree(self)-> None:
         self.phase_alignment_start.wait()  ## IF Phase three is active
         while self.phase_alignment_start.is_set():
-            if recent_boxes[0][2]/recent_boxes[0][3]>1.3 and recent_boxes[0][0]<238 and recent_boxes[0][0]>178: ##at most 30 degrees fail
+            if recent_boxes[0][2]/recent_boxes[0][3]>1.3 and recent_boxes[0][0]<238 and recent_boxes[0][0]>178: ##at most 60 pixel fail
                 self.phase_alignment_start.clear()
+                self.phase_end_start.set()
             else:
-                send_pwm(y= 350*self.turn, yaw= -200*self.turn+self.proportionalYawValue)
+                send_pwm(y= 400*self.turn, yaw=self.proportionalYawValue)
           
 
         self.phaseThree()
@@ -128,12 +131,11 @@ class OtonomVehicle():
         self.phase_end_start.wait()   ## IF Phase four is active
         
         while self.phase_end_start.is_set():
-            #send_pwm(x=400)
-            send_pwm(x=400, yaw=self.proportionalYawValue/3)
+            #send_pwm(x=400) #If yaw makes it worse somehow
+            send_pwm(x=400, yaw=self.proportionalYawValue/3) ## Yaw tries to correct mistakes
            
-            recent_boxes[0][0] += (-250+self.proportionalYawValue+self.integralYawValue+self.derivativeYawValue)
             
-            time.sleep(1)
+            
 
         self.phaseFour()
 
@@ -143,4 +145,4 @@ class OtonomVehicle():
 # print(f'Proportional {self.proportionalYawValue}')
 #addition = 100
 # print(f'added {addition}')
-Vehicle = OtonomVehicle()
+

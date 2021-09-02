@@ -1,23 +1,24 @@
-from copy import Error
 import threading
+
 from tkinter import *
 from PIL import ImageTk, Image
+
 import cv2
 import gi
 gi.require_version("Gst", "1.0")
 from gi.repository import Gst
+
 import numpy as np
 import time
 from pymavlink import mavutil
-from math import pi as PI
+from pymavlink.quaternion import QuaternionBase
+
+import math
 import threading
 import os.path
-from random import random, randint
 import sys
 
-import cProfile
-Profiler = cProfile.Profile()
-master = None
+master = None#mavutil.mavlink_connection("udpin:192.168.2.1:14550")
 boot_time = time.time()
 #-------------------------------
 class Video():
@@ -148,6 +149,7 @@ class Video():
 
         return Gst.FlowReturn.OK
 video = Video(port=4777)
+
 cap = cv2.VideoCapture(0)
 if not cap.isOpened():
     print("Cannot open camera")
@@ -162,6 +164,7 @@ def videoMain():
 
         ret , video_frame = cap.read()
         if ret:
+            video_frame = cv2.resize(video_frame, (416,416))
             yolo_thread_in_main = threading.Thread(target=yoloVideo, args=(video_frame,))
             opencv_thread_in_main = threading.Thread(target=opencvVideo, args=(video_frame,))
 
@@ -174,17 +177,12 @@ def videoMain():
             del opencv_thread_in_main
     videoMain()
         
-        
-
-lastYoloFrame: np.ndarray
-lastOpenCVFrame: np.ndarray
 
 def yoloVideo(frameYolo:np.ndarray):
     frame_start_time: float = time.time()
     
     global recent_boxes
     
-    frameYolo = cv2.resize(frameYolo, (416,416))
     """cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #BGR RGB dönüşümü
     height, width = (int(cv2image.shape[1]*img_scale),int(cv2image.shape[0]*img_scale))
 
@@ -199,9 +197,14 @@ def yoloVideo(frameYolo:np.ndarray):
             w = recent_boxes[0][2]
             h=  recent_boxes[0][3]
             
-            cv2.rectangle(frameYolo, (int(recent_boxes[0][0]-w/2), int(recent_boxes[0][1]-h/2)), (int(recent_boxes[0][0]+w/2), int(recent_boxes[0][1]+h/2)),(0,0,0), thickness=2)
+            cv2.rectangle(frameYolo,
+            (int(recent_boxes[0][0]-w/2),int(recent_boxes[0][1]-h/2)),
+            (int(recent_boxes[0][0]+w/2),int(recent_boxes[0][1]+h/2)),
+            (0,0,0), thickness=1)
+            recognition_label.config(text=f"Object is {208-recent_boxes[0][0]} pixels from the center")
     except:
         pass
+
     detected_image = cv2.cvtColor(frameYolo , cv2.COLOR_BGR2RGB)
     imgYolo = Image.fromarray(detected_image)
 
@@ -210,21 +213,19 @@ def yoloVideo(frameYolo:np.ndarray):
     yolo_video.imgtk = imgtkYolo
     yolo_video.configure(image=imgtkYolo)
     
-    #wmDecideOnce(detected_image, recent_boxes)
     
     ##FPS
     yolo_fps = 1.0/(time.time()-frame_start_time)
     yolo_fps_label.config(text=f"Fps: {yolo_fps}")
 
-lower_hsv = np.array([0, 0, 0])
-upper_hsv = np.array([180, 184, 147])
+lower_hsv = np.array([40, 76, 85])
+upper_hsv = np.array([76, 164, 172])
 
 def opencvVideo(frameCV):
 
     opencv_start_time = time.time()
     
     
-    frameCV = cv2.resize(frameCV, (416,416))
     hsvCV = cv2.cvtColor(frameCV, cv2.COLOR_BGR2HSV)
     
     
@@ -259,7 +260,6 @@ def statusUpdate():
             rcvpacket = master.recv_match().to_dict()
         except:
             rcvpacket = None
-        #r,p,y,d = generatorfunc().pop(0), generatorfunc().pop(0), generatorfunc().pop(0), generatorfunc().pop(0)
         roll_label.config(text=f'Roll: ')
         pitch_label.config(text=f'Pitch: ')
         yaw_label.config(text=f'Yaw: ')
@@ -276,13 +276,6 @@ def statusUpdate():
         time.sleep(0.02)
     
 
-def generatorFunction():
-    vals = []
-    vals.append(randint(0,360))
-    vals.append(randint(0,360))
-    vals.append(randint(0,360))
-    vals.append(randint(0,10))
-    return vals
 
 
 
@@ -302,6 +295,24 @@ def flightModeSet(mode_name):
         mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
         mode_id)
 
+def cameraGimbalSet(tilt, roll=0, pan=0):
+    """
+    Gimbal istenen pozisyona taşınır.
+    Args:
+        tilt (float): santiderece cinsinden tilt (0 nötr)
+        roll (float, isteğe bağlı): santiderece cinsinden roll (0 nötr)
+        pan  (float, isteğe bağlı): santiderece cinsinden pan (0 nötr)
+    """
+    master.mav.command_long_send(
+        master.target_system,
+        master.target_component,
+        mavutil.mavlink.MAV_CMD_DO_MOUNT_CONTROL,
+        1,
+        tilt,
+        roll,
+        pan,
+        0, 0, 0,
+        mavutil.mavlink.MAV_MOUNT_MODE_MAVLINK_TARGETING)
 
 
 def requestMessageInterval(message_id: int, frequency_hz: float):
@@ -329,8 +340,8 @@ def setTargetDepth(depth):
         int(1e3 * (time.time() - boot_time)), # ms since boot
         master.target_system, master.target_component,
         coordinate_frame=mavutil.mavlink.MAV_FRAME_GLOBAL_INT,
-        type_mask=0xdfe,  # ignore everything except z position
-        lat_int=0, long_int=0, alt=depth, # (x, y WGS84 frame pos - not used), z [m]
+        type_mask=0xdfb,  # ignore everything except z position
+        lat_int=0, lon_int=0, alt=depth, # (x, y WGS84 frame pos - not used), z [m]
         vx=0, vy=0, vz=0, # velocities in NED frame [m/s] (not used)
         afx=0, afy=0, afz=0, yaw=0, yaw_rate=0
         # accelerations in NED frame [N], yaw, yaw_rate
@@ -338,36 +349,146 @@ def setTargetDepth(depth):
     )
 
 
+def setTargetAttitude(roll=0, pitch=0, yaw=0):
+    """ Sets the target attitude while in depth-hold mode.
+
+    'roll', 'pitch', and 'yaw' are angles in degrees.
+
+    """
+    # https://mavlink.io/en/messages/common.html#ATTITUDE_TARGET_TYPEMASK
+    # 1<<6 = THROTTLE_IGNORE -> allow throttle to be controlled by depth_hold mode
+    bitmask = 1<<6
+
+    master.mav.set_attitude_target_send(
+        int(1e3 * (time.time() - boot_time)), # ms since boot
+        master.target_system, master.target_component,
+        bitmask,
+        # -> attitude quaternion (w, x, y, z | zero-rotation is 1, 0, 0, 0)
+        QuaternionBase([math.radians(angle) for angle in (roll, pitch, yaw)]),
+        0, 0, 0, 0 # roll rate, pitch rate, yaw rate, thrust
+    )
 
 
-#VEHICLE CONTROL
 
+#VEHICLE CONTROL------------------
 
-def pwmDecideOnce(detected_image,recent_boxes):
-    try:
-        #detection coordinates
-        tlx,tly,w,h= recent_boxes[0]
-        detectedMidx = tlx+w/2
-        detectedMidy = tly+h/2
-
-        #image corrdinates
-        imgWidth, imgHeight, _ = detected_image.shape
-        imgWidth_third = imgWidth/3
-        imgWidth_two_third = 2*imgWidth_third
+class OtonomVehicle():
+    def __init__(self) -> None:
+        self.frameDim = 416
+        self.frameMid = 208
+        self.kp = 1.0
+        self.ki = 0.002
+        self.kd = -0.5
+        self.preTotal = 0
+        self.lastPositionMid = 0
         
-        if detectedMidx<imgWidth_third:             #left
-            #send_pwm(yaw=-400,z=150)
-            current_activity_label.config(text="Object found on the left")
-        elif detectedMidx<imgWidth_two_third:       #middle
-            #send_pwm(x=1000,z=150)
-            current_activity_label.config(text="Object found in the middle")
+        self.locationRight = True
+        self.turn = 1
+        
+        self.phase_finding_start = threading.Event()
+        self.phase_locationtest_start = threading.Event()
+        self.phase_alignment_start = threading.Event()
+        self.phase_end_start = threading.Event()
+
+        self.phase_finding_start.clear()
+        self.phase_locationtest_start.clear()
+        self.phase_alignment_start.clear()
+        self.phase_end_start.clear()
+
+        self.phase_finding_thread = threading.Thread(target=self.phaseOne)
+        self.phase_finding_thread.start()
+
+        self.phase_locationtest_thread = threading.Thread(target=self.phaseTwo)
+        self.phase_locationtest_thread.start()
+
+        self.phase_alignment_thread = threading.Thread(target=self.phaseThree)
+        self.phase_alignment_thread.start()
+
+        self.phase_end_thread = threading.Thread(target=self.phaseFour)
+        self.phase_end_thread.start()
+    
+    @property
+    def proportionalYawValue(self):
+        return self.kp * (208-recent_boxes[0][0])
+    
+    @property
+    def integralYawValue(self):
+        self.preTotal += self.ki * (208-recent_boxes[0][0])
+        if self.preTotal>50:
+            self.preTotal=50
+
+        return self.preTotal
+    
+    @property
+    def derivativeYawValue(self):
+        currentMid = recent_boxes[0][0] 
+        Diff = currentMid - self.lastPositionMid
+        self.lastPositionMid = currentMid
+        return Diff
+
+    def phaseOne(self) -> None:
+        """Spin until you find the frame"""
+        self.phase_finding_start.wait()  ## IF Phase one is active
+        current_activity_label.config(text="Phase 1: Find the Frame")
+        while self.phase_finding_start.is_set():
+            if len(recent_boxes[0]) != 0: ##recent_boxes has a value
+                sendPwm(yaw=self.proportionalYawValue+self.integralYawValue+self.derivativeYawValue)
+                if 178 < recent_boxes[0] < 238: ##Close to center 60 pixel leniency
+                    self.phase_finding_start.clear()
+                    self.phase_locationtest_start.set()
+            else:
+                sendPwm(yaw=400)
+
+        self.phaseOne()
+    
+    def phaseTwo(self) -> None:
+        """Determines the turn direction"""
+        self.phase_locationtest_start.wait() ## IF Phase two is active
+        current_activity_label.config(text="Phase 2: Find your turn Direction")
+        while self.phase_locationtest_start.is_set():
+            startTime = time.time()
+            startRatio = recent_boxes[0][2]/recent_boxes[0][3]
+
+            while time.time()<startTime+6:
+                sendPwm(y=500*self.turn, yaw=self.proportionalYawValue) ##c-clockwise
+            endRatio = recent_boxes[0][2]/recent_boxes[0][3]
+            if endRatio>startRatio:
+                self.turn = 1 ## c-clockwise turn around the frame
+            else:
+                self.turn = -1 ## clockwise turn
+            self.phase_locationtest_start.clear()
+            self.phase_alignment_start.set()
+
+        self.phaseTwo()
             
-        else:                                       #right
-            # send_pwm(yaw=1000,z=250)
-            current_activity_label.config(text="Object found on the right")
-    except:
-        # send_pwm(yaw=1000,z=200)
-        current_activity_label.config(text="Object NOt Found")
+
+    def phaseThree(self)-> None:
+        self.phase_alignment_start.wait()  ## IF Phase three is active
+        current_activity_label.config(text="Phase 3: Alignment")
+        while self.phase_alignment_start.is_set():
+            if recent_boxes[0][2]/recent_boxes[0][3]>1.3 and recent_boxes[0][0]<238 and recent_boxes[0][0]>178: ##at most 60 pixel fail
+                self.phase_alignment_start.clear()
+                self.phase_end_start.set()
+            else:
+                sendPwm(y= 400*self.turn, yaw=self.proportionalYawValue)
+          
+
+        self.phaseThree()
+
+    def phaseFour(self) -> None:
+        self.phase_end_start.wait()   ## IF Phase four is active
+        current_activity_label.config(text="Phase 4: Straight ahaid, End")
+        while self.phase_end_start.is_set():
+            #sendPwm(x=400) #If yaw makes it worse somehow
+            sendPwm(x=400, yaw=self.proportionalYawValue/3) ## Yaw tries to correct mistakes
+           
+            
+            
+
+        self.phaseFour()
+
+Vehicle = OtonomVehicle()
+
 
 def sendPwm(x =0, y=0 , z = 500, yaw=0 , buttons=0):
     """Send manual pwm to the axis of a joystick. 
@@ -383,9 +504,9 @@ def sendPwm(x =0, y=0 , z = 500, yaw=0 , buttons=0):
     master.mav.manual_control_send(master.target_system, x,y,z,yaw,buttons)
 
 #------------------------------------------
-net = cv2.dnn.readNet(os.path.abspath('Yolo_files/yolov4-tiny.weights'),os.path.abspath('Yolo_files/yolov4-tiny.cfg'))
+net = cv2.dnn.readNet(os.path.abspath('Yolo_files/yolo-custom_3000.weights'),os.path.abspath('Yolo_files/yolo-custom.cfg'))
 detection_classes = []
-with open(os.path.abspath('Yolo_files/coco.names'), 'r') as f:
+with open(os.path.abspath('Yolo_files/obj.names'), 'r') as f:
     detection_classes = [line.strip() for line in f.readlines()]
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]
@@ -406,12 +527,12 @@ def yoloDetection(raw_image) ->list:
             scores = detection[5:]
             class_id = np.argmax(scores)
             confidence = scores[class_id]
-            if confidence > 0.3:
+            if confidence > 0.5:
                 center_x = int(detection[0]*width)
                 center_y = int(detection[1]*height)
                 w = int(detection[2]*width)
                 h = int(detection[3]*height)
-
+                
                 boxes.append([center_x, center_y,w,h])
                 confidences.append(float(confidence))
                 class_ids.append(class_id)
@@ -425,7 +546,7 @@ def yoloDetection(raw_image) ->list:
 
 
 
-#--------------------------------------------
+#THREADED--------------------------------------------
 
 
 def toggleArm():
@@ -438,13 +559,18 @@ def toggleArm():
         master.motors_armed_wait()
         arm_status_label.config(text="Vehicle Status: Armed")
 
-
-
 def startAllThreads():
     status_update_thread.start()
     video_main_thread.start()
 
-
+def toggleOnOff():
+    if not video_on.is_set():
+        video_on.set()
+        status_update.set()
+    else:
+        video_on.clear()
+        status_update.clear()
+        
 
 
 
@@ -525,8 +651,8 @@ toggle_arm_disarm.grid()
 
 #status_update_button = Button(button_frame, text='Status Update', command=status_update_thread.start)
 
-# toggleButton = Button(button_frame, text='Toggle All Activity', command=toggleOnOff)
-# toggleButton.grid()
+toggleButton = Button(button_frame, text='Toggle All Activity', command=toggleOnOff)
+toggleButton.grid()
 #BUtton Display
 
 
@@ -556,7 +682,7 @@ pitch_label = Label(status_frame, text="Pitch: N/A")
 yaw_label = Label(status_frame, text="Yaw: N/A")
 depth_label = Label(status_frame, text="Depth: N/A")
 
-servo_label = Label(status_frame, text="Servo: N/A")
+manipulator_servo_label = Label(status_frame, text="Servo: N/A")
 recognition_label = Label(status_frame, text="Object Recognition: N/A")
 
 current_activity_label = Label(status_frame, text="Current Activity: ")
@@ -571,26 +697,43 @@ yaw_label.grid()
 depth_label.grid()
 
 
-servo_label.grid()
+manipulator_servo_label.grid()
 recognition_label.grid()
 
 current_activity_label.grid()
-###BUTTONS
+
+###MAIN SETUP
 def main():
-    pass
+    ###Vehicle Armed
+    arm_status_label.config(text="Vehicle Status Disarmed")
+    master.arducopter_arm()
+    master.motors_armed_wait()
+    arm_status_label.config(text="Vehicle Status: Armed")
+    ###Flight Mode Depth Hold
+    FLIGHT_MODE = 'ALT_HOLD'
+    FLIGHT_MODE_ID = master.mode_mapping()[FLIGHT_MODE]
+    while not master.wait_heartbeat().custom_mode == FLIGHT_MODE_ID:
+        master.set_mode(FLIGHT_MODE)
+    flight_mode_label.config(text="Flight Mode: ALT_HOLD")
+
+    ###Camera Servo
+    cameraGimbalSet(500) ##Camera Jerk
+    cameraGimbalSet(0)
+    ##Manipulator Servo
+    manipulator_servo_label.config(text="Servo Not Attached")
+    
+    
+
+    ##Target Depth and Attitude
+    setTargetDepth(-1)
+    #setTargetAttitude()
+
+    ##Start Phase 1
+    Vehicle.phase_finding_start.set()
+    ##Start GUI
+    root.mainloop()
 
 if __name__ == "__main__":
-    arm_status_label.config(text="Vehicle Status Disarmed")
-    flight_mode_label.config(text="Flight Mode: ALT_HOLD")
-    servo_label.config(text="Servo Not Attached")
 
     root.mainloop()
-    
     #main()
-
-
-
-
-
-
-

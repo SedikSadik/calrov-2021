@@ -9,9 +9,9 @@ import cProfile
 cap = cv2.VideoCapture(0)
 
 
-net = cv2.dnn.readNet(os.path.abspath('Yolo_files/yolov4.weights'),os.path.abspath('Yolo_files/yolov4.cfg'))
+net = cv2.dnn.readNet(os.path.abspath('Yolo_files/yolov4-tiny.weights'),os.path.abspath('Yolo_files/yolov4-tiny.cfg'))
 detection_classes = []
-with open(os.path.abspath('Yolo_files/obj.names'), 'r') as f:
+with open(os.path.abspath('Yolo_files/coco.names'), 'r') as f:
     detection_classes = [line.strip() for line in f.readlines()]
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]
@@ -44,10 +44,11 @@ def yolo_detection(raw_image):
                 confidences.append(float(confidence))
                 class_ids.append(class_id)
     indexes = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
+    print(indexes)
     #print(indexes)
     #DISPLAY DETECTION
     total_detections = len(boxes)
-    new_boxes = [boxes[index] for index in indexes[0] if indexes[0] is not None]
+
     for i in range(total_detections):
         if i in indexes:
             topleft_x, topleft_y, w,h = boxes[i]
@@ -56,30 +57,29 @@ def yolo_detection(raw_image):
             cv2.rectangle(raw_image, (topleft_x,topleft_y), (topleft_x+w,topleft_y+h), (0,100,255), 1)
             cv2.putText(raw_image,f"w: {w}, label:{label}", (topleft_x, topleft_y),cv2.FONT_HERSHEY_COMPLEX_SMALL,1,(0,165,255))
     #print(new_boxes)
+    if len(indexes)>0:
+        new_boxes = [boxes[index] for index in indexes[0]]
+        return raw_image , new_boxes
 
-    return raw_image, new_boxes
 
-ret, frame = cap.read()
-image = cv2.imread(os.path.abspath("photos/ 1 üst 50 derece 3.jpg"))
-print(cProfile.run("yolo_detection(image)"))
-PERSON_WIDTH_CM = 48
+FRAME_WIDTH_CM = 150
 FOCAL_LENGTH_PX = 462.92
 
-# while True:
-#     start = time.time()
-#     ret, frame = cap.read()
-#     try:
-#         if ret:
-#             frame = cv2.resize(frame, (416,416))
-#             detected, boxes = yolo_detection(frame)
-            
-#             width = boxes[0][2]
-#             DISTANCE  = (FOCAL_LENGTH_PX*PERSON_WIDTH_CM)/width
-#             cv2.putText(detected,f"{str(round(DISTANCE))} cm", (20,20), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1,(0,0,0))
-#             cv2.imshow("detected", detected)
+while True:
+    start = time.time()
+    ret, frame = cap.read()
+    if ret:
 
-#         if cv2.waitKey(1) & 0xFF == ord("q"):
-#             break
-#     except:
-#         pass
-#     print(1.0/ (time.time()- start))
+        
+        frame = cv2.resize(frame, (416,416))
+        detected, boxes = yolo_detection(frame)
+        
+        width = boxes[0][2]
+        DISTANCE  = (FOCAL_LENGTH_PX*FRAME_WIDTH_CM)/width
+        cv2.putText(detected,f"{str(round(DISTANCE))} cm", (20,20), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1,(0,0,0))
+        cv2.imshow("detected", detected)
+
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            break
+        
+    print(1.0/ (time.time()- start))
