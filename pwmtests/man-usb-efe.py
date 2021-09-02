@@ -29,7 +29,7 @@ root=Tk()
 root.title("CALROV GUI")
 
 #Icon
-icontmp = Image.open(os.path.abspath('./GUI/gui_images/calrov_logo.jpg'))
+icontmp = Image.open(os.path.abspath('gui_images/calrov_logo.jpg'))
 icon = ImageTk.PhotoImage(icontmp)
 root.tk.call('wm','iconphoto',root._w, icon)
 # TITLE TEXT
@@ -337,9 +337,9 @@ def attitude_tk():
 
 ### YOLO and DETECTION
 ## Loading Yolo
-net = cv2.dnn.readNet(os.path.abspath('./GUI/Yolo_files/yolov4-tiny.weights'),os.path.abspath('./GUI/Yolo_files/yolov4-tiny.cfg'))
+net = cv2.dnn.readNet(os.path.abspath('Yolo_files/yolov4-tiny.weights'),os.path.abspath('Yolo_files/yolov4-tiny.cfg'))
 detection_classes = []
-with open(os.path.abspath('./GUI/Yolo_files/coco.names'), 'r') as f:
+with open(os.path.abspath('Yolo_files/coco.names'), 'r') as f:
     detection_classes = [line.strip() for line in f.readlines()]
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]

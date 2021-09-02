@@ -9,9 +9,9 @@ import cProfile
 cap = cv2.VideoCapture(0)
 
 
-net = cv2.dnn.readNet(os.path.abspath('./GUI/Yolo_files/yolov4.weights'),os.path.abspath('./GUI/Yolo_files/yolov4.cfg'))
+net = cv2.dnn.readNet(os.path.abspath('Yolo_files/yolov4.weights'),os.path.abspath('Yolo_files/yolov4.cfg'))
 detection_classes = []
-with open(os.path.abspath('./GUI/Yolo_files/obj.names'), 'r') as f:
+with open(os.path.abspath('Yolo_files/obj.names'), 'r') as f:
     detection_classes = [line.strip() for line in f.readlines()]
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]

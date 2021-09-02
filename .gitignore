@@ -4,6 +4,7 @@ ship.pck
 example_photos/
 masks/
 __pycache__
-GUI/Yolo_files/yolov3-tiny.weights
-GUI/Yolo_files/yolov4.weights
+Outdated/
+photos/
+*weights
 photos/

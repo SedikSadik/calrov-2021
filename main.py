@@ -335,9 +335,9 @@ def resetAll():
     status_update = False
 
 #------------------------------------------
-net = cv2.dnn.readNet(os.path.abspath('./GUI/Yolo_files/yolo-custom_3000.weights'),os.path.abspath('./GUI/Yolo_files/yolo-custom.cfg'))
+net = cv2.dnn.readNet(os.path.abspath('Yolo_files/yolo-custom_3000.weights'),os.path.abspath('Yolo_files/yolo-custom.cfg'))
 detection_classes = []
-with open(os.path.abspath('./GUI/Yolo_files/obj.names'), 'r') as f:
+with open(os.path.abspath('Yolo_files/obj.names'), 'r') as f:
     detection_classes = [line.strip() for line in f.readlines()]
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]
@@ -430,7 +430,7 @@ video_on = True
 root=Tk()
 root.title("CALROV GUI")
 ##Icon
-icon = Image.open(os.path.abspath('./GUI/gui_images/calrov_logo.jpg'))
+icon = Image.open(os.path.abspath('gui_images/calrov_logo.jpg'))
 icon = ImageTk.PhotoImage(icon)
 root.tk.call('wm','iconphoto',root._w, icon)
 
