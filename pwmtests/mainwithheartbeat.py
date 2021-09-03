@@ -146,13 +146,12 @@ class Video():
         return Gst.FlowReturn.OK
 video = Video(port=4777)
 
-cap = cv2.VideoCapture(0)
-if not cap.isOpened():
-    print("Cannot open camera")
-    exit()
+# cap = cv2.VideoCapture(0)
+# if not cap.isOpened():
+#     print("Cannot open camera")
+#     exit()
 
 recent_boxes = []
-
 def videoMain():
     video_on.wait()
 
@@ -338,7 +337,7 @@ def setTargetDepth(depth):
         int(1e3 * (time.time() - boot_time)), # ms since boot
         master.target_system, master.target_component,
         coordinate_frame=mavutil.mavlink.MAV_FRAME_GLOBAL_INT,
-        type_mask=0xdfb,  # ignore everything except z position
+        type_mask=0xdfb,  # ignore everything except z position 
         lat_int=0, lon_int=0, alt=depth, # (x, y WGS84 frame pos - not used), z [m]
         vx=0, vy=0, vz=0, # velocities in NED frame [m/s] (not used)
         afx=0, afy=0, afz=0, yaw=0, yaw_rate=0
