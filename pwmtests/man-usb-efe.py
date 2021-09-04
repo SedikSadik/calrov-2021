@@ -17,7 +17,7 @@ import sys
 #127.0.0.1:9002 bluesim
 #192.168.2.1:14550
 
-master = mavutil.mavlink_connection("udpin:127.0.0.1:9002")
+master = mavutil.mavlink_connection("udpin:192.168.2.1:14550")
 master.wait_heartbeat()
 print("Successful Connection!")
 
@@ -339,9 +339,9 @@ def attitude_tk():
 
 ### YOLO and DETECTION
 ## Loading Yolo
-net = cv2.dnn.readNet(os.path.abspath('Yolo_files/yolov4-tiny.weights'),os.path.abspath('Yolo_files/yolov4-tiny.cfg'))
+net = cv2.dnn.readNet(os.path.abspath('Yolo_files/yolo-custom_3000.weights'),os.path.abspath('Yolo_files/yolo-custom.cfg'))
 detection_classes = []
-with open(os.path.abspath('Yolo_files/coco.names'), 'r') as f:
+with open(os.path.abspath('Yolo_files/obj.names'), 'r') as f:
     detection_classes = [line.strip() for line in f.readlines()]
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]

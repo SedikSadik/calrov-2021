@@ -1,4 +1,5 @@
 import cProfile
+from sys import setdlopenflags
 import threading
 import os
 import cv2
@@ -8,7 +9,6 @@ import random
 
 
 master = None
-recent_boxes = [[1,2,430,40]]
 
 def send_pwm(x =0, y=0 , z = 500, yaw=0 , buttons=0):
     """Send manual pwm to the axis of a joystick. 
@@ -26,47 +26,55 @@ def send_pwm(x =0, y=0 , z = 500, yaw=0 , buttons=0):
 
 
 class OtonomVehicle():
-    def __init__(self):
-        self.frameDim = 416
-        self.frameMid = 208
+    def __init__(self, connection):
+        self.connection = connection
+        
         self.kp = 1.0
         self.ki = 0.002
-        self.kd = -0.5
+        self.kd = -0.2
         self.preTotal = 0
         self.lastPositionMid = 0
         
-        self.locationRight = True
         self.turn = 1
+
+        self.currentlyDetected = False
+        self.recent_boxes = [[1,2,430,40]]
+
         
+        self.phase_depth_start = threading.Event()
         self.phase_finding_start = threading.Event()
         self.phase_locationtest_start = threading.Event()
         self.phase_alignment_start = threading.Event()
         self.phase_end_start = threading.Event()
 
+        self.phase_depth_start.clear
         self.phase_finding_start.clear()
         self.phase_locationtest_start.clear()
         self.phase_alignment_start.clear()
         self.phase_end_start.clear()
 
-        self.phase_finding_thread = threading.Thread(target=self.phaseOne)
+        self.phase_depth_thread = threading.Thread(target=self.phaseOne)
+        self.phase_depth_thread.start()
+
+        self.phase_finding_thread = threading.Thread(target=self.phaseTwo)
         self.phase_finding_thread.start()
 
-        self.phase_locationtest_thread = threading.Thread(target=self.phaseTwo)
+        self.phase_locationtest_thread = threading.Thread(target=self.phaseThree)
         self.phase_locationtest_thread.start()
 
-        self.phase_alignment_thread = threading.Thread(target=self.phaseThree)
+        self.phase_alignment_thread = threading.Thread(target=self.phaseFour)
         self.phase_alignment_thread.start()
 
-        self.phase_end_thread = threading.Thread(target=self.phaseFour)
+        self.phase_end_thread = threading.Thread(target=self.phaseFive)
         self.phase_end_thread.start()
     
     @property
     def proportionalYawValue(self):
-        return self.kp * (208-recent_boxes[0][0])
+        return self.kp * (208-self.recent_boxes[0][0])
     
     @property
     def integralYawValue(self):
-        self.preTotal += self.ki * (208-recent_boxes[0][0])
+        self.preTotal += self.ki * (208-self.recent_boxes[0][0])
         if self.preTotal>50:
             self.preTotal=50
 
@@ -74,37 +82,43 @@ class OtonomVehicle():
     
     @property
     def derivativeYawValue(self):
-        currentMid = recent_boxes[0][0] 
+        currentMid = self.recent_boxes[0][0] 
         Diff = currentMid - self.lastPositionMid
         self.lastPositionMid = currentMid
         return Diff
 
-    def phaseOne(self) -> None:
+
+    def phaseOne(self)->None:
+        "Finds the pool depth"
+        self.phase_depth_start.wait()
+
+
+    def phaseTwo(self) -> None:
         """Spin until you find the frame"""
         self.phase_finding_start.wait()  ## IF Phase one is active
 
         while self.phase_finding_start.is_set():
-            if len(recent_boxes[0]) != 0: ##recent_boxes has a value
+            if len(self.recent_boxes[0]) != 0: ##self.recent_boxes has a value
                 send_pwm(yaw=self.proportionalYawValue+self.integralYawValue+self.derivativeYawValue)
-                if 178 < recent_boxes[0] < 238: ##Close to center 60 pixel leniency
+                if 178 < self.recent_boxes[0] < 238: ##Close to center 60 pixel leniency
                     self.phase_finding_start.clear()
                     self.phase_locationtest_start.set()
             else:
                 send_pwm(yaw=400)
 
-        self.phaseOne()
+        self.phaseTwo()
     
-    def phaseTwo(self) -> None:
+    def phaseThree(self) -> None:
         """Determines the turn direction"""
         self.phase_locationtest_start.wait() ## IF Phase two is active
         
         while self.phase_locationtest_start.is_set():
             startTime = time.time()
-            startRatio = recent_boxes[0][2]/recent_boxes[0][3]
+            startRatio = self.recent_boxes[0][2]/self.recent_boxes[0][3]
 
             while time.time()<startTime+6:
                 send_pwm(y=500*self.turn, yaw=self.proportionalYawValue) ##c-clockwise
-            endRatio = recent_boxes[0][2]/recent_boxes[0][3]
+            endRatio = self.recent_boxes[0][2]/self.recent_boxes[0][3]
             if endRatio>startRatio:
                 self.turn = 1 ## c-clockwise turn around the frame
             else:
@@ -112,22 +126,22 @@ class OtonomVehicle():
             self.phase_locationtest_start.clear()
             self.phase_alignment_start.set()
 
-        self.phaseTwo()
+        self.phaseThree()
             
 
-    def phaseThree(self)-> None:
+    def phaseFour(self)-> None:
         self.phase_alignment_start.wait()  ## IF Phase three is active
         while self.phase_alignment_start.is_set():
-            if recent_boxes[0][2]/recent_boxes[0][3]>1.3 and recent_boxes[0][0]<238 and recent_boxes[0][0]>178: ##at most 60 pixel fail
+            if self.recent_boxes[0][2]/self.recent_boxes[0][3]>1.3 and self.recent_boxes[0][0]<238 and self.recent_boxes[0][0]>178: ##at most 60 pixel fail
                 self.phase_alignment_start.clear()
                 self.phase_end_start.set()
             else:
                 send_pwm(y= 400*self.turn, yaw=self.proportionalYawValue)
           
 
-        self.phaseThree()
+        self.phaseFour()
 
-    def phaseFour(self) -> None:
+    def phaseFive(self) -> None:
         self.phase_end_start.wait()   ## IF Phase four is active
         
         while self.phase_end_start.is_set():
@@ -137,9 +151,9 @@ class OtonomVehicle():
             
             
 
-        self.phaseFour()
+        self.phaseFive()
 
-# print(f'Mid X value{recent_boxes[0][0]}')
+# print(f'Mid X value{self.recent_boxes[0][0]}')
 # print(f'Derivative {self.derivativeYawValue}')
 # print(f'Integral {self.integralYawValue}')
 # print(f'Proportional {self.proportionalYawValue}')

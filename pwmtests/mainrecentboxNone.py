@@ -155,6 +155,7 @@ video = Video(port=4777)
 #     exit()
 
 recent_boxes = None
+#recent_boxes_lock = threading.Lock()
 def videoMain():
     video_on.wait()
 
@@ -187,24 +188,19 @@ def yoloVideo(frameYolo:np.ndarray):
 
     scaled_img = cv2.resize(cv2image,(height, width))
     """
-    tmp_boxes = yoloDetection(frameYolo)
-    recent_boxes = tmp_boxes
-    try:
+    yoloDetection(frameYolo)
         
+    ##Draw 
+    if type(recent_boxes) == list:
+
+        w = recent_boxes[0][2]
+        h=  recent_boxes[0][3]
         
-        ##Draw 
-        if tmp_boxes and type(tmp_boxes[0])==list and  len(tmp_boxes[0])==4:
-            recent_boxes = tmp_boxes
-            w = recent_boxes[0][2]
-            h=  recent_boxes[0][3]
-            
-            cv2.rectangle(frameYolo,
-            (int(recent_boxes[0][0]-w/2),int(recent_boxes[0][1]-h/2)),
-            (int(recent_boxes[0][0]+w/2),int(recent_boxes[0][1]+h/2)),
-            (0,0,0), thickness=1)
-            recognition_label.config(text=f"Object is {208-recent_boxes[0][0]} pixels from the center. Ratio {w/h}")
-    except:
-        pass
+        cv2.rectangle(frameYolo,
+        (int(recent_boxes[0][0]-w/2),int(recent_boxes[0][1]-h/2)),
+        (int(recent_boxes[0][0]+w/2),int(recent_boxes[0][1]+h/2)),
+        (0,0,0), thickness=1)
+        recognition_label.config(text=f"Object is {208-recent_boxes[0][0]} pixels from the center")
 
     detected_image = cv2.cvtColor(frameYolo , cv2.COLOR_BGR2RGB)
     imgYolo = Image.fromarray(detected_image)
@@ -378,7 +374,7 @@ class OtonomVehicle():
     def __init__(self) -> None:
         self.frameDim = 416
         self.frameMid = 208
-        self.kp = 3.0
+        self.kp = 1.5
         self.ki = 0.002
         self.kd = -0.5
         self.preTotal = 0
@@ -411,44 +407,39 @@ class OtonomVehicle():
     
     @property
     def proportionalYawValue(self):
-        if type(recent_boxes) == list:
-            return self.kp * (208-recent_boxes[0][0])
-        else:
-            return 400
-    
+        
+        return self.kp * (208-recent_boxes[0][0])
     @property
     def integralYawValue(self):
-        if type(recent_boxes) == list:
-            self.preTotal += self.ki * (208-recent_boxes[0][0])
-            if self.preTotal>50:
-                self.preTotal=50
+        self.preTotal += self.ki * (208-recent_boxes[0][0])
+        if self.preTotal>50:
+            self.preTotal=50
 
-            return self.preTotal
-        else:
-            return 0
+        return self.preTotal
     
     @property
     def derivativeYawValue(self):
-        if type(recent_boxes) == list:
-            currentMid = recent_boxes[0][0] 
-            Diff = currentMid - self.lastPositionMid
-            self.lastPositionMid = currentMid
-            return Diff
-        else:
-            return -100
+        currentMid = recent_boxes[0][0] 
+        Diff = currentMid - self.lastPositionMid
+        self.lastPositionMid = currentMid
+        return Diff
 
     def phaseOne(self) -> None:
         """Spin until you find the frame"""
         self.phase_finding_start.wait()  ## IF Phase one is active
         current_activity_label.config(text="Phase 1: Find the Frame")
         while self.phase_finding_start.is_set():
-            if type(recent_boxes) ==list: ##recent_boxes has a value
-                sendPwm(yaw=int(self.proportionalYawValue)) #self.integralYawValue+self.derivativeYawValue
+            
+            if currentlyDetected: ##recent_boxes has a value
+                #recent_boxes_lock.acquire()
+                sendPwm(yaw=int(self.proportionalYawValue+self.integralYawValue))
                 if 178 < recent_boxes[0][0] < 238: ##Close to center 60 pixel leniency
                     self.phase_finding_start.clear()
                     self.phase_locationtest_start.set()
+                #recent_boxes_lock.release()
             else:
                 sendPwm(yaw=400)
+                
 
         self.phaseOne()
     
@@ -457,23 +448,23 @@ class OtonomVehicle():
         self.phase_locationtest_start.wait() ## IF Phase two is active
         current_activity_label.config(text="Phase 2: Find your turn Direction")
         while self.phase_locationtest_start.is_set():
-            if type(recent_boxes) == list:
+            #recent_boxes_lock.acquire()
+            startTime = time.time()
+            startRatio = recent_boxes[0][2]/recent_boxes[0][3]
+            #recent_boxes_lock.release()
+            while time.time()<startTime+6:
+                #recent_boxes_lock.acquire()
+                sendPwm(y=500*self.turn, yaw=int(-75*self.turn+self.proportionalYawValue/self.kp)) ##c-clockwise
+                #recent_boxes_lock.release()
+            endRatio = recent_boxes[0][2]/recent_boxes[0][3]
             
-                startTime = time.time()
-
-                startRatio = recent_boxes[0][2]/recent_boxes[0][3]
-
-                while time.time()<startTime+6:
-                    sendPwm(y=400*self.turn, yaw=int(self.proportionalYawValue)) ##c-clockwise
-                endRatio = recent_boxes[0][2]/recent_boxes[0][3]
-                if endRatio>startRatio:
-                    self.turn = 1 ## c-clockwise turn around the frame
-                else:
-                    self.turn = -1 ## clockwise turn
-                self.phase_locationtest_start.clear()
-                self.phase_alignment_start.set()
+            if endRatio>startRatio:
+                self.turn = 1 ## c-clockwise turn around the frame
             else:
-                sendPwm(yaw=200)
+                self.turn = -1 ## clockwise turn
+            
+            self.phase_locationtest_start.clear()
+            self.phase_alignment_start.set()
 
         self.phaseTwo()
             
@@ -481,15 +472,16 @@ class OtonomVehicle():
     def phaseThree(self)-> None:
         self.phase_alignment_start.wait()  ## IF Phase three is active
         current_activity_label.config(text="Phase 3: Alignment")
+        
         while self.phase_alignment_start.is_set():
-            if type(recent_boxes) == list:
-                if recent_boxes[0][2]/recent_boxes[0][3]>1.1 and recent_boxes[0][0]<238 and recent_boxes[0][0]>178: ##at most 60 pixel fail
+            #recent_boxes_lock.acquire()
+            if currentlyDetected:
+                if recent_boxes[0][2]/recent_boxes[0][3]>1.3 and recent_boxes[0][0]<238 and recent_boxes[0][0]>178: ##at most 60 pixel fail
                     self.phase_alignment_start.clear()
                     self.phase_end_start.set()
                 else:
-                    sendPwm(y= 400*self.turn, yaw=int(self.proportionalYawValue))
-            else:
-                sendPwm(yaw=200)
+                    sendPwm(y= 400*self.turn, yaw=int(-150*self.turn +self.proportionalYawValue+self.integralYawValue))
+            #recent_boxes_lock.release()
 
         self.phaseThree()
 
@@ -497,9 +489,10 @@ class OtonomVehicle():
         self.phase_end_start.wait()   ## IF Phase four is active
         current_activity_label.config(text="Phase 4: Straight ahaid, End")
         while self.phase_end_start.is_set():
+            #recent_boxes_lock.acquire()
             #sendPwm(x=400) #If yaw makes it worse somehow
             sendPwm(x=400, yaw=int(self.proportionalYawValue)) ## Yaw tries to correct mistakes
-           
+            #recent_boxes_lock.release()
             
             
 
@@ -508,7 +501,7 @@ class OtonomVehicle():
 Vehicle = OtonomVehicle()
 
 
-def sendPwm(x =0, y=0 , z = 400, yaw=0 , buttons=0):
+def sendPwm(x =0, y=0 , z = 360, yaw=0 , buttons=0):
     """Send manual pwm to the axis of a joystick. 
     Relative to the vehicle
     x for right-left motion
@@ -528,9 +521,11 @@ with open(os.path.abspath('Yolo_files/obj.names'), 'r') as f:
     detection_classes = [line.strip() for line in f.readlines()]
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i[0]-1] for i in net.getUnconnectedOutLayers()]
-
-def yoloDetection(raw_image) ->list:
+currentlyDetected =False
+def yoloDetection(raw_image) ->None:
     """Take in as input a cv2 image"""
+    global recent_boxes
+    global currentlyDetected
     class_ids = []
     confidences = []
     boxes = []
@@ -558,10 +553,14 @@ def yoloDetection(raw_image) ->list:
     indexes = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
 
     if len(indexes)>0:
-        new_boxes = [boxes[index] for index in indexes[0]]
-        return new_boxes
+        #recent_boxes_lock.acquire()
+        recent_boxes = [boxes[index] for index in indexes[0]]
+        #recent_boxes_lock.release()
+        currentlyDetected = True
     else:
-        return recent_boxes
+        currentlyDetected = False
+    
+        
     
 
 
@@ -726,91 +725,92 @@ current_activity_label.grid()
 
 
 
-# mavlink = mavutil.mavlink
+mavlink = mavutil.mavlink
 
 
-# class WriteLockedFile(object):
-#     """ A file with thread-locked writing. """
-#     def __init__(self, file):
-#         self._base_file = file
-#         self._write_lock = threading.Lock()
+class WriteLockedFile(object):
+    """ A file with thread-locked writing. """
+    def __init__(self, file):
+        self._base_file = file
+        self._write_lock = threading.Lock()
         
-#     def write(self, *args, **kwargs):
-#         with self._write_lock:
-#             self._base_file.write(*args, **kwargs)
+    def write(self, *args, **kwargs):
+        with self._write_lock:
+            self._base_file.write(*args, **kwargs)
     
-#     def __getattr__(self, name):
-#         return getattr(self._base_file, name)
+    def __getattr__(self, name):
+        return getattr(self._base_file, name)
     
-#     def __dir__(self):
-#         return dir(self._base_file) + ["_base_file", "_write_lock"]
+    def __dir__(self):
+        return dir(self._base_file) + ["_base_file", "_write_lock"]
 
 
-# class mavactive(object):
-#     """ A class for managing an active mavlink connection. """
-#     def __init__(self, connection, type_=mavlink.MAV_TYPE_GENERIC, autopilot=mavlink.MAV_AUTOPILOT_INVALID, base_mode=0, custom_mode=0,
-#                  mavlink_version=0, heartbeat_period=0.95):
-#         """ Initialises the program state and starts the heartbeat thread. """
-#         self.connection = connection
-#         self.type = type_
-#         self.autopilot = autopilot
-#         self.base_mode = base_mode
-#         self.custom_mode = custom_mode
-#         self.mavlink_version = mavlink_version
-#         self.heartbeat_period = heartbeat_period
+class mavactive(object):
+    """ A class for managing an active mavlink connection. """
+    def __init__(self, connection, type_=mavlink.MAV_TYPE_GENERIC, autopilot=mavlink.MAV_AUTOPILOT_INVALID, base_mode=0, custom_mode=0,
+                 mavlink_version=0, heartbeat_period=0.95):
+        """ Initialises the program state and starts the heartbeat thread. """
+        self.connection = connection
+        self.type = type_
+        self.autopilot = autopilot
+        self.base_mode = base_mode
+        self.custom_mode = custom_mode
+        self.mavlink_version = mavlink_version
+        self.heartbeat_period = heartbeat_period
         
-#         # replace internal file with a thread-safe one
-#         self.connection.mav.file = WriteLockedFile(self.connection.mav.file)
-#         # set up the kill event and initialise the heartbeat thread
-#         self._kill = threading.Event()
-#         self._birth()
+        # replace internal file with a thread-safe one
+        self.connection.mav.file = WriteLockedFile(self.connection.mav.file)
+        # set up the kill event and initialise the heartbeat thread
+        self._kill = threading.Event()
+        self._birth()
 
-#     def _birth(self):
-#         """ Creates and starts the heartbeat thread. """
-#         self._kill.clear()
-#         self.heartbeat_thread = threading.Thread(target=self.heartbeat_repeat)
-#         self.heartbeat_thread.start()
+    def _birth(self):
+        """ Creates and starts the heartbeat thread. """
+        self._kill.clear()
+        self.heartbeat_thread = threading.Thread(target=self.heartbeat_repeat)
+        self.heartbeat_thread.start()
 
-#     @property
-#     def is_alive(self):
-#         return not self._kill.is_set()
+    @property
+    def is_alive(self):
+        return not self._kill.is_set()
 
-#     def heartbeat_repeat(self):
-#         """ Sends a heartbeat to 'self.connection' with 'self.heartbeat_period'. """
-#         while self.is_alive:
-#             self.connection.mav.heartbeat_send(
-#                 self.type,
-#                 self.autopilot,
-#                 self.base_mode,
-#                 self.custom_mode,
-#                 self.mavlink_version
-#             )
-#             time.sleep(self.heartbeat_period)
+    def heartbeat_repeat(self):
+        """ Sends a heartbeat to 'self.connection' with 'self.heartbeat_period'. """
+        while self.is_alive:
+            self.connection.mav.heartbeat_send(
+                self.type,
+                self.autopilot,
+                self.base_mode,
+                self.custom_mode,
+                self.mavlink_version
+            )
+            time.sleep(self.heartbeat_period)
 
-#     def kill(self):
-#         """ Stops the heartbeat, if not already dead. """
-#         if not self.is_alive:
-#             return # already dead
+    def kill(self):
+        """ Stops the heartbeat, if not already dead. """
+        if not self.is_alive:
+            return # already dead
 
-#         self._kill.set()
-#         self.heartbeat_thread.join()
-#         del self.heartbeat_thread
+        self._kill.set()
+        self.heartbeat_thread.join()
+        del self.heartbeat_thread
 
-#     def revive(self):
-#         """ Starts the heartbeat, if not already alive. """
-#         if self.is_alive:
-#             return # already alive
+    def revive(self):
+        """ Starts the heartbeat, if not already alive. """
+        if self.is_alive:
+            return # already alive
 
-#         self._birth()
+        self._birth()
 
-#     def __del__(self):
-#         """ End the thread cleanly on program end. """
-#         self.kill()
+    def __del__(self):
+        """ End the thread cleanly on program end. """
+        self.kill()
+
 
 ###MAIN SETUP
 def main():
     ##HEARTBEAT
-    # heartbeatPulser = mavactive(master)
+    heartbeatPulser = mavactive(master)
     ###Vehicle Armed
     arm_status_label.config(text="Vehicle Status Disarmed")
     master.arducopter_arm()
@@ -824,10 +824,10 @@ def main():
     flight_mode_label.config(text="Flight Mode: ALT_HOLD")
 
     ###Camera Servo
-    cameraGimbalSet(5000) ##Camera Jerk
+    cameraGimbalSet(500) ##Camera Jerk
     cameraGimbalSet(0)
     ##Manipulator Servo
-    manipulator_servo_label.config(text="Servo Attached")
+    manipulator_servo_label.config(text="Servo Not Attached")
     
     ##Message Interval
     #requestMessageInterval()
@@ -837,7 +837,7 @@ def main():
     #setTargetAttitude()
 
     ##Start Phase 1
-    
+    #Vehicle.phase_finding_start.set()
     ##Start GUI
     root.mainloop()
 
