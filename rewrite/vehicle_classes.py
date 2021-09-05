@@ -13,7 +13,7 @@ from pymavlink import mavutil
 # Vehicle Class
 
 class OtonomVehicle():
-    def __init__(self, connection):
+    def __init__(self, connection ):
         self.connection = connection
         #self.connection.wait_heartbeat()
         self.boot_time = time.time()
@@ -24,7 +24,12 @@ class OtonomVehicle():
         self.preTotal = 0
         self.lastDetectedMidX = 0
 
-        self.turn = 1
+        self.roll = 0
+        self.pitch = 0
+        self.yaw = 0
+        self.current_depth = 0
+
+        self.turn = 1 ##Aligment phase turn direction
 
         # recentBoxes should ALWAYS be a list with 4 coords
         self.currentlyDetected = threading.Event()
@@ -32,13 +37,12 @@ class OtonomVehicle():
 
         self.recent_boxes = [208, 208, 1, 1]
 
-        self.current_depth = 0
         # self.PIDUpToDate = threading.Event()  # is pid values up to date?
         # self.PIDUpToDate.clear()  # init as not up to date
         self.boxLock = threading.Lock()
 
         self.updater_thread = threading.Thread(target=self.PIDUpdater)
-        self.updater_thread.start()
+        #self.updater_thread.start()
 
         self.status_update_event = threading.Event()
         self.status_update_event.clear()
@@ -46,6 +50,8 @@ class OtonomVehicle():
         
         self.video_on_event = threading.Event()
         self.video_on_event.clear()
+        
+        #self.video_thread :threading.Thread
         print("vehicle init success")
     
     def PIDUpdater(self):
@@ -294,6 +300,7 @@ class Driver():
     def phaseOne(self, vehicle: OtonomVehicle) -> None:
         "Finds the pool depth"
         self.phase_depth_start.wait()
+        print("Phase one has begun")
 
     def phaseTwo(self, vehicle: OtonomVehicle) -> None:
         """Spin until you find the frame"""

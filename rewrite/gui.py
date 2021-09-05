@@ -1,3 +1,4 @@
+import tkinter
 from .vehicle_classes import OtonomVehicle
 from tkinter import *
 from PIL import Image, ImageTk
@@ -8,7 +9,13 @@ import os
 
 
 class CALROV_GUI():
-    def __init__(self, startAllThreads,toggleVideo, toggleArm, toggleOnOff, vehicle: OtonomVehicle,  title : str="CALROV", icon_path: str = None) -> None:
+    def __init__(self,
+        startAllThreads,
+        toggleOnOff,
+        vehicle: OtonomVehicle,
+        title : str="CALROV",
+        icon_path: str = None) -> None:
+
         self.root = Tk()
         self.root.title(title)
         
@@ -30,7 +37,7 @@ class CALROV_GUI():
         self.yolo_fps_label = Label(self.video_app, text="Yolo Fps: 0")
         self.yolo_fps_label.grid(row=2, column=0)
 
-        
+        print("init 1 success")
 
         ##Buttons
         self.button_frame = Frame(self.root, bg="white")
@@ -38,20 +45,20 @@ class CALROV_GUI():
         self.button_frame.grid(row=3, column=0)
 
         self.start_threads_button = Button(self.button_frame, text="Start all threads", 
-                                command=startAllThreads,)
+                                command=lambda: startAllThreads(vehicle.video_thread, vehicle.status_update_thread))
         self.start_threads_button.grid()
 
         self.start_video_button = Button(self.button_frame, text='Toggle Video',
-                                command=toggleVideo,args=)
+                                )
         self.start_video_button.grid()
 
         self.toggle_arm_disarm_button = Button(self.button_frame, text='Toggle Arm/Disarm',
-                                command=toggleArm)
+                                )
         self.toggle_arm_disarm_button.grid()
 
         self.toggle_button = Button(self.button_frame, text='Toggle All Activity', command=toggleOnOff)
         self.toggle_button.grid()
-
+        print("init 2")
 
         ##VEHICLE STATUS
         self.status_frame = Frame(self.root)
@@ -96,6 +103,11 @@ class CALROV_GUI():
         
         self.current_pwm_label = Label(self.status_frame, text="Current pwm sent = N/A")
         self.current_pwm_label.grid()
+        print("init3")
+
+    def Button_configure(button:tkinter.Button, startAllThreads,vehicle):
+        button.configure(command=lambda: startAllThreads(vehicle.video_thread, vehicle.status_update_thread))
+
 
 if __name__ =="__main__":
     gui = CALROV_GUI( None, None, None, None)

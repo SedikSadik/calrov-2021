@@ -1,4 +1,5 @@
 import tkinter
+from tkinter.constants import NO
 import numpy as np
 import cv2
 import time
@@ -9,7 +10,7 @@ from PIL import ImageTk , Image
 
 ##DEFINITIONS
 
-def yoloDetection(vehicle:OtonomVehicle, net :cv2.dnn.readNet,  output_layers,raw_image:np.ndarray) ->None:
+def yoloDetection(vehicle:OtonomVehicle, net :cv2.dnn.readNet,  output_layers,raw_image:np.ndarray, recognition_label:tkinter.Label = None) ->None:
     """Take in as input a cv2 image, Changes the vehicle recentboxes and current detection attributes."""
     class_ids = []
     confidences = []
@@ -38,25 +39,35 @@ def yoloDetection(vehicle:OtonomVehicle, net :cv2.dnn.readNet,  output_layers,ra
     indexes = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
 
     if len(indexes)>0:
-        #recent_boxes_lock.acquire()
+        vehicle.boxLock.acquire()
         vehicle.recent_boxes = [boxes[index] for index in indexes[0]]
-        #recent_boxes_lock.release()
+        vehicle.boxLock.release()
+
         vehicle.currentlyDetected.set()
     else:
         vehicle.currentlyDetected.clear()
     
 
-def yolo_video(vehicle:OtonomVehicle, yolo_net:cv2.dnn.readNet ,output_layers:list, yolo_video_app: tkinter.Frame, yolo_frame:np.ndarray, yolo_fps_label : tkinter.Label=None):
+def yolo_video(vehicle:OtonomVehicle, yolo_net:cv2.dnn.readNet ,output_layers:list, yolo_video_app: tkinter.Frame, yolo_frame:np.ndarray, yolo_fps_label : tkinter.Label=None, recognition_label:tkinter.Label = None):
     frame_start_time: float = time.time()
     
     yoloDetection(vehicle, yolo_net,output_layers,yolo_frame )
+    vehicle.boxLock.acquire()
     tmp_yolo_boxes = vehicle.recent_boxes[0]
+    vehicle.boxLock.release()
+
     if vehicle.currentlyDetected.is_set() and type(tmp_yolo_boxes)==list:
-        cx,cy,w,h = tmp_yolo_boxes[0]
+        cx = tmp_yolo_boxes[0]
         cy = tmp_yolo_boxes[1]
-        w = tmp_yolo_boxes[2]
-        h = tmp_yolo_boxes[3]
-        yolo_frame = cv2.
+        w  = tmp_yolo_boxes[2]
+        h  = tmp_yolo_boxes[3]
+        yolo_frame = cv2.rectangle(yolo_frame,
+            (int(cx-w/2), int(cy-h/2)),
+            (int(cx+w/2), int(cy+h/2)),
+            (0,0,0), thickness=1)
+        if recognition_label is not None:
+            recognition_label.config(text=f"Object is {cx-208}")
+
     color_converted_yolo = cv2.cvtColor(yolo_frame, cv2.COLOR_BGR2RGB)
     imgYolo = Image.fromarray(color_converted_yolo)
 

@@ -5,7 +5,6 @@ import cv2
 from .videoclass import Video
 
 def video_main(video_source:cv2.VideoCapture or Video,
-    video_event: threading.Event,
     yolo_video_function,
     vehicle:OtonomVehicle,
     yolo_net:cv2.dnn.readNet,
@@ -15,11 +14,13 @@ def video_main(video_source:cv2.VideoCapture or Video,
     opencv_video_function=None,
     resolution: tuple = (416,416)):
     
-    if isinstance(video_source, (Video, cv2.VideoCapture)):
-        raise TypeError("Only VideoCapture or Video instances are accepted.")
+    if isinstance(video_source,cv2.VideoCapture) or isinstance(video_source ,Video ):
+        print(type(video_source))
+        #raise TypeError(f"Only VideoCapture or Video instances are accepted.{type(video_source)}")
     print("Waiting for video to be on...")
-    video_event.wait()
-    while video_event.is_set():
+    vehicle.video_on_event.wait()
+    
+    while vehicle.video_on_event.is_set():
         success, video_frame = video_source.read() 
         
         if success:
@@ -42,4 +43,4 @@ def video_main(video_source:cv2.VideoCapture or Video,
             del yolo_thread_in_main
             
 
-    video_main(video_source, video_event, yolo_video_function, opencv_video_function)
+    video_main(video_source, vehicle.video_on_event, yolo_video_function, opencv_video_function)
