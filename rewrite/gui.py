@@ -1,3 +1,4 @@
+from .vehicle_classes import OtonomVehicle
 from tkinter import *
 from PIL import Image, ImageTk
 import os
@@ -7,7 +8,7 @@ import os
 
 
 class CALROV_GUI():
-    def __init__(self, startAllThreads,toggleVideo, toggleArm, toggleOnOff,  title : str="CALROV", icon_path: str = None) -> None:
+    def __init__(self, startAllThreads,toggleVideo, toggleArm, toggleOnOff, vehicle: OtonomVehicle,  title : str="CALROV", icon_path: str = None) -> None:
         self.root = Tk()
         self.root.title(title)
         
@@ -16,7 +17,7 @@ class CALROV_GUI():
             self.icon = ImageTk.PhotoImage(_tmp)
             self.root.tk.call("wm", "iconphoto", self.root._w, self.icon)
 
-        self.title_label = Label(self.root, text = "CALROV TALAY")
+        self.title_label = Label(self.root, text = title)
         self.title_label.config(font =("Courier", 20))
         self.title_label.grid(row=0, column=0, columnspan=4)
 
@@ -29,6 +30,7 @@ class CALROV_GUI():
         self.yolo_fps_label = Label(self.video_app, text="Yolo Fps: 0")
         self.yolo_fps_label.grid(row=2, column=0)
 
+        
 
         ##Buttons
         self.button_frame = Frame(self.root, bg="white")
@@ -36,11 +38,11 @@ class CALROV_GUI():
         self.button_frame.grid(row=3, column=0)
 
         self.start_threads_button = Button(self.button_frame, text="Start all threads", 
-                                command=startAllThreads)
+                                command=startAllThreads,)
         self.start_threads_button.grid()
 
         self.start_video_button = Button(self.button_frame, text='Toggle Video',
-                                command=toggleVideo )
+                                command=toggleVideo,args=)
         self.start_video_button.grid()
 
         self.toggle_arm_disarm_button = Button(self.button_frame, text='Toggle Arm/Disarm',
@@ -95,6 +97,6 @@ class CALROV_GUI():
         self.current_pwm_label = Label(self.status_frame, text="Current pwm sent = N/A")
         self.current_pwm_label.grid()
 
-        
-gui = CALROV_GUI( None, None, None, None,title="kek")
-gui.root.mainloop()
+if __name__ =="__main__":
+    gui = CALROV_GUI( None, None, None, None)
+    gui.root.mainloop()
